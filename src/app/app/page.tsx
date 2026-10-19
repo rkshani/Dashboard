@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { WidgetGrid } from "@/components/widgets/Widgets";
 import { requireProfile } from "@/lib/auth";
+import { getRepo } from "@/lib/data";
 import { getTemplate } from "@/templates";
 
 export default function HomePage() {
@@ -24,6 +25,8 @@ function greeting(timezone: string) {
 async function Home() {
   const { profile } = await requireProfile();
   const template = getTemplate(profile.templateId);
+  const { repo, today: todayIso } = await getRepo();
+  const [clients, projects, tasks] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTasks()]);
   let today = "";
   try {
     today = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: profile.timezone }).format(new Date());
@@ -39,10 +42,10 @@ async function Home() {
           {greeting(profile.timezone)}, {profile.displayName}
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Widgets marked <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold">Sample</span> show example data until each module is connected.
+          Widgets marked <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold">Sample</span> show example data until that module is connected.
         </p>
       </header>
-      <WidgetGrid template={template} profile={profile} />
+      <WidgetGrid template={template} profile={profile} data={{ clients, projects, tasks, today: todayIso }} />
     </div>
   );
 }

@@ -18,7 +18,9 @@ export const DEMO_PROFILE_COOKIE = "dash_demo_profile";
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   if (!supabaseConfigured()) {
     const jar = await cookies();
-    return jar.get(DEMO_COOKIE) ? { id: "demo", email: "demo@local", demo: true } : null;
+    const id = jar.get(DEMO_COOKIE)?.value;
+    // The demo cookie holds a random session id that keys the in-memory demo store.
+    return id && /^[0-9a-f-]{36}$/.test(id) ? { id, email: "demo@local", demo: true } : null;
   }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser(); // verified with the auth server

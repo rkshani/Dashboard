@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -70,7 +71,7 @@ export async function signInWithGoogle(formData: FormData) {
 export async function startDemo() {
   if (supabaseConfigured()) redirect("/login");
   const jar = await cookies();
-  jar.set(DEMO_COOKIE, "1", cookieOpts);
+  if (!/^[0-9a-f-]{36}$/.test(jar.get(DEMO_COOKIE)?.value ?? "")) jar.set(DEMO_COOKIE, randomUUID(), cookieOpts);
   redirect(jar.get(DEMO_PROFILE_COOKIE) ? "/app" : "/onboarding");
 }
 

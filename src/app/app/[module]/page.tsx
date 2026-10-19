@@ -2,7 +2,11 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Sections";
+import { ClientsView } from "@/components/app/views/ClientsView";
+import { ProjectsView } from "@/components/app/views/ProjectsView";
+import { TasksView } from "@/components/app/views/TasksView";
 import { requireProfile } from "@/lib/auth";
+import { getRepo } from "@/lib/data";
 import { getTemplate } from "@/templates";
 
 /** What each module will do once built — shown so the shell is honest about progress. */
@@ -20,20 +24,31 @@ const roadmap: Record<string, string[]> = {
   automations: ["Turn built-in rules on or off", "See what ran and when", "Your own When / Then rules"],
 };
 
-export default function ModulePage({ params }: PageProps<"/app/[module]">) {
+export default function ModulePage({ params, searchParams }: PageProps<"/app/[module]">) {
   return (
     <Suspense fallback={<div className="mx-auto h-64 max-w-3xl animate-pulse rounded-2xl bg-surface" />}>
-      <ModuleBody params={params} />
+      <ModuleBody params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function ModuleBody({ params }: { params: PageProps<"/app/[module]">["params"] }) {
+async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module]">, "params" | "searchParams">) {
   const { module: moduleId } = await params;
   const { profile } = await requireProfile();
   const template = getTemplate(profile.templateId);
   const mod = template.modules.find((m) => m.id === moduleId);
   if (!mod) notFound();
+
+  // Modules with real data. Teachers' "Students" share the clients store; "Classes"/"Campaigns" share projects.
+  if (mod.id === "clients" || mod.id === "students" || mod.id === "projects" || mod.id === "tasks") {
+    const { repo, today } = await getRepo();
+    const [clients, projects, tasks] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTasks()]);
+    if (mod.id === "clients" || mod.id === "students") return <ClientsView template={template} clients={clients} projects={projects} />;
+    if (mod.id === "tasks") return <TasksView template={template} tasks={tasks} projects={projects} today={today} />;
+    const sp = await searchParams;
+    const view = sp.view === "list" ? "list" : "board";
+    return <ProjectsView template={template} projects={projects} clients={clients} tasks={tasks} today={today} currency={profile.currency} view={view} />;
+  }
 
   return (
     <div className="mx-auto max-w-3xl">

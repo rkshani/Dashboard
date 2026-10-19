@@ -22,13 +22,14 @@ cp .env.example .env.local   # optional: fill in Supabase values
 npm run dev                  # http://localhost:3000
 ```
 
-**Demo mode:** without Supabase values, `/login` shows "Try the demo". Onboarding and the
-dashboard work fully; the profile is kept in a cookie in your browser. Nothing is saved on a server.
+**Demo mode:** without Supabase values, `/login` shows "Try the demo". Everything works:
+your profile is kept in a cookie, and clients/projects/tasks live in server memory for your
+demo session (seeded with examples; restarting the server resets them).
 
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run `supabase/migrations/0001_waitlist.sql`, then `0002_profiles.sql`.
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0003`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -52,7 +53,10 @@ dashboard work fully; the profile is kept in a cookie in your browser. Nothing i
 | **Template engine** | `src/templates/` |
 | App shell + sidebar | `src/app/app/layout.tsx`, `src/components/app/Sidebar.tsx` |
 | Home widgets + widget registry | `src/components/widgets/Widgets.tsx` |
-| Module pages (placeholders for now) | `src/app/app/[module]/page.tsx` |
+| Module routing (real views or "coming next") | `src/app/app/[module]/page.tsx` |
+| Clients, Projects (board + list), Tasks screens | `src/components/app/views/` |
+| Create / edit / delete actions | `src/app/app/work-actions.ts` |
+| Storage interface + Supabase and demo implementations | `src/lib/data/` |
 | Database migrations | `supabase/migrations/` |
 
 ### Templates
@@ -68,7 +72,8 @@ To add a widget type: add it to `WIDGET_TYPES` and to the registry in `Widgets.t
 
 - Proxy refreshes the session and blocks `/app` and `/onboarding` for signed-out users;
   the server re-checks with `supabase.auth.getUser()` in `src/lib/auth.ts`.
-- Row-level security: users can only read and write their own `profiles` row; the waitlist is insert-only.
+- Row-level security: users can only read and write their own profile, clients, projects and tasks;
+  a trigger blocks linking to another account's client or project; the waitlist is insert-only.
 - All input is parsed with zod on the server; redirects only go to `/app/*`.
 - Login is rate-limited and doesn't reveal whether an email has an account.
 - CSP, HSTS, frame, referrer and permissions headers in `next.config.ts`.
@@ -76,10 +81,12 @@ To add a widget type: add it to `WIDGET_TYPES` and to the registry in `Widgets.t
 ## Status
 
 Done: landing site, waitlist, auth, onboarding, template engine (4 templates), app shell,
-home widgets (sample data, clearly labelled), settings with live template switching.
+settings with live template switching, and real **Clients**, **Projects** (Kanban + list) and
+**Tasks** (overdue / today / upcoming). Home KPIs, Today and Active projects use real data;
+opportunities, money and pipeline widgets still show labelled sample data.
 
-Next: real data for Tasks, Projects, Clients and Finance; Google Calendar sync; the opportunity
-collectors and matching; automations and the daily digest.
+Next: Finance and invoices; Google Calendar sync; the opportunity collectors and matching;
+automations and the daily digest.
 
 ## Deploy
 

@@ -3,10 +3,14 @@ import type { ReactNode } from "react";
 import type { Profile } from "@/lib/profile";
 import type { Template } from "@/templates";
 import type { WidgetType } from "@/templates/types";
-import { sampleMoney, sampleOpportunities, sampleToday } from "./sample-data";
+import type { Client, Project, Task } from "@/lib/data/types";
+import { daysBetween, relativeDay } from "@/lib/dates";
+import { sampleMoney, sampleOpportunities } from "./sample-data";
 
 type WidgetConfig = Template["widgets"][number];
-type WidgetProps = { template: Template; profile: Profile; widget: WidgetConfig };
+const lower = (s: string) => (/^\d/.test(s) ? s : s[0].toLowerCase() + s.slice(1));
+export type WorkData = { clients: Client[]; projects: Project[]; tasks: Task[]; today: string };
+type WidgetProps = { template: Template; profile: Profile; widget: WidgetConfig; data: WorkData };
 
 const spanClass = { 1: "lg:col-span-1", 2: "lg:col-span-2", 3: "lg:col-span-3" } as const;
 
@@ -33,22 +37,21 @@ function Card({ title, href, children, span, delay, sample = true }: { title: st
   );
 }
 
-function Kpis({ template, profile }: WidgetProps) {
+function Kpis({ template, data }: WidgetProps) {
   const v = template.vocabulary;
-  const items =
-    template.id === "teacher"
-      ? [
-          { label: "Classes today", value: "4", note: "next at 09:30", tone: "text-muted" },
-          { label: v.clients, value: "28", note: "3 new this month", tone: "text-good" },
-          { label: "Fees due", value: "6", note: "2 overdue", tone: "text-warn" },
-          { label: "New requests", value: "3", note: "matched to your subjects", tone: "text-good" },
-        ]
-      : [
-          { label: "Due today", value: "7 tasks", note: "2 overdue", tone: "text-warn" },
-          { label: `New ${v.opportunities.toLowerCase()}`, value: "12", note: "3 scored above 85", tone: "text-good" },
-          { label: "Unpaid invoices", value: "2", note: `${profile.currency} [amount] pending`, tone: "text-muted" },
-          { label: "Meetings", value: "3", note: "next at 11:00", tone: "text-muted" },
-        ];
+  const open = data.tasks.filter((t) => !t.done);
+  const dueToday = open.filter((t) => t.dueDate === data.today).length;
+  const overdue = open.filter((t) => t.dueDate && t.dueDate < data.today).length;
+  const activeProjects = data.projects.filter((p) => p.status === "active" || p.status === "review").length;
+  const dueSoon = data.projects.filter((p) => p.status !== "done" && p.deadline && daysBetween(data.today, p.deadline) <= 7 && daysBetween(data.today, p.deadline) >= 0).length;
+  const activeClients = data.clients.filter((c) => c.status === "active").length;
+  const leads = data.clients.filter((c) => c.status === "lead").length;
+  const items = [
+    { label: "Due today", value: String(dueToday), note: overdue ? `${overdue} overdue` : "nothing overdue", tone: overdue ? "text-warn" : "text-good" },
+    { label: `Active ${v.projects.toLowerCase()}`, value: String(activeProjects), note: dueSoon ? `${dueSoon} due this week` : "no deadlines this week", tone: dueSoon ? "text-accent" : "text-muted" },
+    { label: `Active ${v.clients.toLowerCase()}`, value: String(activeClients), note: leads ? `${leads} ${leads === 1 ? "lead" : "leads"} in the pipeline` : "no open leads", tone: "text-muted" },
+    { label: `New ${v.opportunities.toLowerCase()}`, value: "12", note: "sample · feed coming soon", tone: "text-muted" },
+  ];
   return (
     <div className="anim-rise grid grid-cols-2 gap-3 md:col-span-2 lg:col-span-3 lg:grid-cols-4">
       {items.map((k) => (
@@ -91,21 +94,34 @@ function Opportunities({ template, profile, widget }: WidgetProps) {
   );
 }
 
-function Today({ template, widget }: WidgetProps) {
+function Today({ widget, data }: WidgetProps) {
+  const projectTitle = new Map(data.projects.map((p) => [p.id, p.title]));
+  const items = data.tasks
+    .filter((t) => !t.done && t.dueDate && t.dueDate <= data.today)
+    .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""))
+    .slice(0, 6);
   return (
-    <Card title={widget.title ?? "Today"} href="/app/tasks" span={widget.span} delay={120}>
-      <ul className="flex flex-col">
-        {sampleToday(template).map((d) => (
-          <li key={d.time} className="flex gap-3 rounded-lg px-1 py-2.5">
-            <span className="w-12 pt-0.5 font-mono text-xs text-muted">{d.time}</span>
-            <span className={`w-0.5 rounded ${d.tone}`} aria-hidden="true" />
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-medium">{d.title}</span>
-              <span className="block text-xs text-muted">{d.sub}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
+    <Card title={widget.title ?? "Today"} href="/app/tasks" span={widget.span} delay={120} sample={false}>
+      {items.length === 0 ? (
+        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">Nothing due today. <Link href="/app/tasks" className="text-accent hover:underline">Add a task</Link></p>
+      ) : (
+        <ul className="flex flex-col">
+          {items.map((t) => {
+            const late = t.dueDate! < data.today;
+            return (
+              <li key={t.id} className="flex gap-3 rounded-lg px-1 py-2.5">
+                <span className={`w-0.5 shrink-0 rounded ${late ? "bg-warn" : t.priority === "high" ? "bg-accent" : "bg-line"}`} aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{t.title}</span>
+                  <span className={`block truncate text-xs ${late ? "text-warn" : "text-muted"}`}>
+                    {[late ? `Overdue · ${relativeDay(t.dueDate!, data.today)}` : "Today", t.projectId ? projectTitle.get(t.projectId) : null].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Card>
   );
 }
@@ -132,29 +148,45 @@ function Money({ widget, template }: WidgetProps) {
   );
 }
 
-function Projects({ template, widget }: WidgetProps) {
+function Projects({ template, widget, data }: WidgetProps) {
   const v = template.vocabulary;
-  const items = [
-    { name: `${v.project} A`, meta: `${v.client}: [name] · due in 12 days`, pct: 72, tone: "bg-accent" },
-    { name: `${v.project} B`, meta: `${v.client}: [name] · due in 26 days`, pct: 45, tone: "bg-good" },
-    { name: `${v.project} C`, meta: "No deadline", pct: 30, tone: "bg-warn" },
-  ];
+  const clientName = new Map(data.clients.map((c) => [c.id, c.name]));
+  const items = data.projects
+    .filter((p) => p.status !== "done")
+    .sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"))
+    .slice(0, 4)
+    .map((p) => {
+      const ts = data.tasks.filter((t) => t.projectId === p.id);
+      const pct = ts.length ? Math.round((ts.filter((t) => t.done).length / ts.length) * 100) : 0;
+      const late = p.deadline && p.deadline < data.today;
+      return {
+        id: p.id,
+        name: p.title,
+        meta: [p.clientId ? clientName.get(p.clientId) : null, p.deadline ? `${late ? "overdue" : "due"} ${lower(relativeDay(p.deadline, data.today))}` : "no deadline"].filter(Boolean).join(" · "),
+        pct,
+        tone: late ? "bg-warn" : "bg-accent",
+      };
+    });
   return (
-    <Card title={widget.title ?? `Active ${v.projects.toLowerCase()}`} href="/app/projects" span={widget.span} delay={200}>
-      <ul className="flex flex-col gap-4">
-        {items.map((p) => (
-          <li key={p.name}>
-            <div className="flex justify-between gap-2 text-sm">
-              <span className="font-medium">{p.name}</span>
-              <span className="font-mono text-xs text-muted">{p.pct}%</span>
-            </div>
-            <div className="text-xs text-muted">{p.meta}</div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
-              <div className={`anim-fill h-1.5 rounded-full ${p.tone}`} style={{ width: `${p.pct}%` }} />
-            </div>
-          </li>
-        ))}
-      </ul>
+    <Card title={widget.title ?? `Active ${v.projects.toLowerCase()}`} href="/app/projects" span={widget.span} delay={200} sample={false}>
+      {items.length === 0 ? (
+        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">No open {v.projects.toLowerCase()}. <Link href="/app/projects" className="text-accent hover:underline">Add one</Link></p>
+      ) : (
+        <ul className="flex flex-col gap-4">
+          {items.map((p) => (
+            <li key={p.id}>
+              <div className="flex justify-between gap-2 text-sm">
+                <span className="truncate font-medium">{p.name}</span>
+                <span className="font-mono text-xs text-muted">{p.pct}%</span>
+              </div>
+              <div className="truncate text-xs text-muted">{p.meta}</div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+                <div className={`anim-fill h-1.5 rounded-full ${p.tone}`} style={{ width: `${p.pct}%` }} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }
@@ -286,12 +318,12 @@ const registry: Record<WidgetType, (p: WidgetProps) => ReactNode> = {
   "content-calendar": ContentCalendar,
 };
 
-export function WidgetGrid({ template, profile }: { template: Template; profile: Profile }) {
+export function WidgetGrid({ template, profile, data }: { template: Template; profile: Profile; data: WorkData }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {template.widgets.map((w, i) => {
         const Component = registry[w.type];
-        return <Component key={`${w.type}-${i}`} template={template} profile={profile} widget={w} />;
+        return <Component key={`${w.type}-${i}`} template={template} profile={profile} widget={w} data={data} />;
       })}
     </div>
   );
