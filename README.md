@@ -29,7 +29,7 @@ demo session (seeded with examples; restarting the server resets them).
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0003`).
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0004`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -56,6 +56,8 @@ demo session (seeded with examples; restarting the server resets them).
 | Module routing (real views or "coming next") | `src/app/app/[module]/page.tsx` |
 | Clients, Projects (board + list), Tasks screens | `src/components/app/views/` |
 | Create / edit / delete actions | `src/app/app/work-actions.ts` |
+| Finance (month view, chart, categories) and invoices (builder, print/PDF) | `src/components/app/views/FinanceView.tsx`, `InvoicesView.tsx`, `src/app/app/invoice/[id]/` |
+| Finance actions (paying an invoice records the income) | `src/app/app/finance-actions.ts` |
 | Storage interface + Supabase and demo implementations | `src/lib/data/` |
 | Database migrations | `supabase/migrations/` |
 
@@ -82,11 +84,13 @@ To add a widget type: add it to `WIDGET_TYPES` and to the registry in `Widgets.t
 
 Done: landing site, waitlist, auth, onboarding, template engine (4 templates), app shell,
 settings with live template switching, and real **Clients**, **Projects** (Kanban + list) and
-**Tasks** (overdue / today / upcoming). Home KPIs, Today and Active projects use real data;
-opportunities, money and pipeline widgets still show labelled sample data.
+**Tasks** (overdue / today / upcoming), **Finance** (income, expenses, categories, 6-month chart)
+and **Invoices** (line items, draft → sent → paid, print / save as PDF). Marking an invoice paid
+records the income automatically; undoing it removes that entry. Home KPIs, Today, Money and
+Active projects use real data; opportunities and pipeline still show labelled sample data.
 
-Next: Finance and invoices; Google Calendar sync; the opportunity collectors and matching;
-automations and the daily digest.
+Next: the opportunity engine (collectors, matching, feed); Google Calendar sync; automations
+and the daily digest.
 
 ## Deploy
 

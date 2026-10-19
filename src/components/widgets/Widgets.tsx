@@ -3,13 +3,14 @@ import type { ReactNode } from "react";
 import type { Profile } from "@/lib/profile";
 import type { Template } from "@/templates";
 import type { WidgetType } from "@/templates/types";
-import type { Client, Project, Task } from "@/lib/data/types";
+import type { Client, Invoice, Project, Task, Transaction } from "@/lib/data/types";
+import { fmtMoney, monthKey, monthLabel, shiftMonth } from "@/lib/money";
 import { daysBetween, relativeDay } from "@/lib/dates";
-import { sampleMoney, sampleOpportunities } from "./sample-data";
+import { sampleOpportunities } from "./sample-data";
 
 type WidgetConfig = Template["widgets"][number];
 const lower = (s: string) => (/^\d/.test(s) ? s : s[0].toLowerCase() + s.slice(1));
-export type WorkData = { clients: Client[]; projects: Project[]; tasks: Task[]; today: string };
+export type WorkData = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; today: string };
 type WidgetProps = { template: Template; profile: Profile; widget: WidgetConfig; data: WorkData };
 
 const spanClass = { 1: "lg:col-span-1", 2: "lg:col-span-2", 3: "lg:col-span-3" } as const;
@@ -126,17 +127,32 @@ function Today({ widget, data }: WidgetProps) {
   );
 }
 
-function Money({ widget, template }: WidgetProps) {
+function Money({ widget, template, profile, data }: WidgetProps) {
+  const thisMonth = monthKey(data.today);
+  const months = Array.from({ length: 6 }, (_, i) => shiftMonth(thisMonth, i - 5));
+  const series = months.map((m) => {
+    const tx = data.transactions.filter((t) => monthKey(t.date) === m);
+    return { m, inc: tx.filter((t) => t.kind === "income").reduce((a, t) => a + t.amount, 0), exp: tx.filter((t) => t.kind === "expense").reduce((a, t) => a + t.amount, 0) };
+  });
+  const peak = Math.max(1, ...series.flatMap((x) => [x.inc, x.exp]));
+  const now = series[series.length - 1];
+  const unpaid = data.invoices.filter((i) => i.status === "sent");
+  const unpaidTotal = unpaid.reduce((a, i) => a + i.total, 0);
+  const href = template.modules.some((m) => m.id === "finance") ? "/app/finance" : template.modules.some((m) => m.id === "invoices") ? "/app/invoices" : undefined;
   return (
-    <Card title={widget.title ?? "Money"} href={template.modules.some((m) => m.id === "finance") ? "/app/finance" : undefined} span={widget.span} delay={160}>
-      <div className="flex h-36 items-end gap-2" role="img" aria-label="Income and expenses over the last six months (sample)">
-        {sampleMoney.map((b, i) => (
+    <Card title={widget.title ?? "Money"} href={href} span={widget.span} delay={160} sample={false}>
+      <p className="-mt-2 mb-3 text-xs text-muted">
+        Net this month <span className={`font-mono font-semibold ${now.inc - now.exp >= 0 ? "text-good" : "text-warn"}`}>{fmtMoney(now.inc - now.exp, profile.currency)}</span>
+        {unpaid.length > 0 && <> · {fmtMoney(unpaidTotal, profile.currency)} unpaid</>}
+      </p>
+      <div className="flex h-32 items-end gap-2" role="img" aria-label={`Income and expenses for the last six months. This month: income ${fmtMoney(now.inc, profile.currency)}, expenses ${fmtMoney(now.exp, profile.currency)}.`}>
+        {series.map((b, i) => (
           <div key={b.m} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
-            <div className="flex h-28 w-full items-end gap-1">
-              <span className="anim-grow block flex-1 rounded-t-md bg-accent" style={{ height: `${b.inc}%`, animationDelay: `${300 + i * 60}ms` }} />
-              <span className="anim-grow block flex-1 rounded-t-md bg-line" style={{ height: `${b.exp}%`, animationDelay: `${330 + i * 60}ms` }} />
+            <div className="flex h-24 w-full items-end gap-1">
+              <span className="anim-grow block flex-1 rounded-t-md bg-accent" style={{ height: `${(b.inc / peak) * 100}%`, animationDelay: `${300 + i * 60}ms` }} />
+              <span className="anim-grow block flex-1 rounded-t-md bg-line" style={{ height: `${(b.exp / peak) * 100}%`, animationDelay: `${330 + i * 60}ms` }} />
             </div>
-            <span className="text-[11px] text-muted">{b.m}</span>
+            <span className="text-[11px] text-muted">{monthLabel(b.m, "short")}</span>
           </div>
         ))}
       </div>

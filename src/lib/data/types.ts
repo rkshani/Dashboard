@@ -107,3 +107,85 @@ export const taskInput = z.object({
 export type TaskInput = z.output<typeof taskInput>;
 
 export type FormState = { status: "idle" | "error" | "success"; message: string; at?: number };
+
+// ---------------- Finance ----------------
+
+export const INCOME_CATEGORIES = ["Project payment", "Retainer", "Salary", "Fees", "Other income"] as const;
+export const EXPENSE_CATEGORIES = ["Software", "Hardware", "Internet & phone", "Rent", "Transport", "Food", "Marketing", "Taxes", "Other"] as const;
+export const INVOICE_STATUSES = ["draft", "sent", "paid"] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+
+export type Transaction = {
+  id: string;
+  kind: "income" | "expense";
+  amount: number;
+  currency: string;
+  category: string;
+  date: string; // YYYY-MM-DD
+  note: string | null;
+  clientId: string | null;
+  projectId: string | null;
+  invoiceId: string | null;
+  createdAt: string;
+};
+
+export type InvoiceItem = { description: string; quantity: number; rate: number };
+
+export type Invoice = {
+  id: string;
+  clientId: string | null;
+  projectId: string | null;
+  number: string;
+  issueDate: string;
+  dueDate: string | null;
+  currency: string;
+  items: InvoiceItem[];
+  total: number;
+  status: InvoiceStatus;
+  paidAt: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+const money = z.coerce.number().refine((n) => Number.isFinite(n) && n > 0 && n < 1e12, "Enter an amount above 0.").transform((n) => Math.round(n * 100) / 100);
+
+export const transactionInput = z.object({
+  kind: z.enum(["income", "expense"]),
+  amount: money,
+  category: z.string().trim().min(1).max(40),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date."),
+  note: optText(300),
+  clientId: optUuid,
+  projectId: optUuid,
+});
+export type TransactionInput = z.output<typeof transactionInput> & { currency: string; invoiceId?: string | null };
+
+export const invoiceItemSchema = z.object({
+  description: z.string().trim().min(1, "Each line needs a description.").max(200),
+  quantity: z.coerce.number().refine((n) => Number.isFinite(n) && n > 0 && n <= 100000, "Quantity must be above 0."),
+  rate: z.coerce.number().refine((n) => Number.isFinite(n) && n >= 0 && n < 1e10, "Rate can't be negative."),
+});
+
+export const invoiceInput = z.object({
+  clientId: optUuid,
+  projectId: optUuid,
+  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick an issue date."),
+  dueDate: optDate,
+  notes: optText(2000),
+  items: z
+    .string()
+    .transform((s, ctx) => {
+      try {
+        return JSON.parse(s) as unknown;
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Invalid line items." });
+        return z.NEVER;
+      }
+    })
+    .pipe(z.array(invoiceItemSchema).min(1, "Add at least one line.").max(50)),
+});
+export type InvoiceInput = z.output<typeof invoiceInput>;
+
+export function invoiceTotal(items: InvoiceItem[]) {
+  return Math.round(items.reduce((s, i) => s + i.quantity * i.rate, 0) * 100) / 100;
+}

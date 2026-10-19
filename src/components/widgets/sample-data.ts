@@ -43,12 +43,3 @@ export function sampleToday(template: Template) {
     { time: "17:30", title: `Follow up on new ${v.opportunity.toLowerCase()}`, sub: "Created by automation", tone: "bg-accent" },
   ];
 }
-
-export const sampleMoney = [
-  { m: "May", inc: 55, exp: 38 },
-  { m: "Jun", inc: 62, exp: 41 },
-  { m: "Jul", inc: 48, exp: 44 },
-  { m: "Aug", inc: 74, exp: 40 },
-  { m: "Sep", inc: 68, exp: 47 },
-  { m: "Oct", inc: 86, exp: 43 },
-];

@@ -125,3 +125,16 @@ body {
   }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* ---------- Print (invoices) ---------- */
+@media print {
+  html, html[data-theme] {
+    --bg: #ffffff; --surface: #ffffff; --surface-2: #f3f4f6; --border: #d1d5db;
+    --text: #111827; --muted: #4b5563; --accent: #1d4ed8; --good: #047857; --warn: #b45309;
+  }
+  html body { background: #fff !important; color: #111827 !important; }
+  #app-nav, .no-print, [aria-controls="app-nav"], .lg\:hidden { display: none !important; }
+  main { padding: 0 !important; }
+  .invoice-sheet { border: 0 !important; padding: 0 !important; box-shadow: none !important; }
+  * { animation: none !important; }
+}

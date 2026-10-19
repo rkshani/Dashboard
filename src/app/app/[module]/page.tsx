@@ -5,6 +5,9 @@ import { Icon } from "@/components/Sections";
 import { ClientsView } from "@/components/app/views/ClientsView";
 import { ProjectsView } from "@/components/app/views/ProjectsView";
 import { TasksView } from "@/components/app/views/TasksView";
+import { FinanceView } from "@/components/app/views/FinanceView";
+import { InvoicesView } from "@/components/app/views/InvoicesView";
+import { monthKey } from "@/lib/money";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { getTemplate } from "@/templates";
@@ -48,6 +51,16 @@ async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module
     const sp = await searchParams;
     const view = sp.view === "list" ? "list" : "board";
     return <ProjectsView template={template} projects={projects} clients={clients} tasks={tasks} today={today} currency={profile.currency} view={view} />;
+  }
+
+  if (mod.id === "finance" || mod.id === "invoices") {
+    const { repo, today, currency } = await getRepo();
+    const [clients, projects, transactions, invoices] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTransactions(), repo.listInvoices()]);
+    if (mod.id === "invoices") return <InvoicesView template={template} invoices={invoices} clients={clients} projects={projects} today={today} currency={currency} />;
+    const sp = await searchParams;
+    const current = monthKey(today);
+    const m = typeof sp.m === "string" && /^\d{4}-\d{2}$/.test(sp.m) && sp.m <= current ? sp.m : current;
+    return <FinanceView template={template} transactions={transactions} invoices={invoices} clients={clients} today={today} currency={currency} month={m} title={mod.label} />;
   }
 
   return (

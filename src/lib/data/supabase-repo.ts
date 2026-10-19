@@ -1,11 +1,31 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { NotFoundError, type Repo } from "./repo";
-import type { Client, ClientInput, Project, ProjectInput, ProjectStatus, Task, TaskInput } from "./types";
+import { NotFoundError, type NewInvoice, type Repo } from "./repo";
+import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 type ClientRow = { id: string; name: string; company: string | null; email: string | null; phone: string | null; status: Client["status"]; notes: string | null; created_at: string };
 type ProjectRow = { id: string; client_id: string | null; title: string; status: ProjectStatus; deadline: string | null; budget: number | string | null; description: string | null; created_at: string };
 type TaskRow = { id: string; project_id: string | null; title: string; due_date: string | null; priority: Task["priority"]; done: boolean; done_at: string | null; created_at: string };
+
+type TxRow = { id: string; kind: Transaction["kind"]; amount: number | string; currency: string; category: string; date: string; note: string | null; client_id: string | null; project_id: string | null; invoice_id: string | null; created_at: string };
+type InvoiceRow = { id: string; client_id: string | null; project_id: string | null; number: string; issue_date: string; due_date: string | null; currency: string; items: Invoice["items"]; total: number | string; status: InvoiceStatus; paid_at: string | null; notes: string | null; created_at: string };
+
+const toTx = (r: TxRow): Transaction => ({ id: r.id, kind: r.kind, amount: Number(r.amount), currency: r.currency, category: r.category, date: r.date, note: r.note, clientId: r.client_id, projectId: r.project_id, invoiceId: r.invoice_id, createdAt: r.created_at });
+const toInvoice = (r: InvoiceRow): Invoice => ({
+  id: r.id,
+  clientId: r.client_id,
+  projectId: r.project_id,
+  number: r.number,
+  issueDate: r.issue_date,
+  dueDate: r.due_date,
+  currency: r.currency,
+  items: Array.isArray(r.items) ? r.items : [],
+  total: Number(r.total),
+  status: r.status,
+  paidAt: r.paid_at,
+  notes: r.notes,
+  createdAt: r.created_at,
+});
 
 const toClient = (r: ClientRow): Client => ({ id: r.id, name: r.name, company: r.company, email: r.email, phone: r.phone, status: r.status, notes: r.notes, createdAt: r.created_at });
 const toProject = (r: ProjectRow): Project => ({
@@ -99,6 +119,84 @@ export class SupabaseRepo implements Repo {
   }
   async deleteTask(id: string) {
     const { error } = await this.db.from("tasks").delete().eq("id", id);
+    check(error);
+  }
+
+  // ---------------- Finance ----------------
+
+  async listTransactions() {
+    const { data, error } = await this.db.from("transactions").select("*").order("date", { ascending: false }).limit(3000);
+    check(error);
+    return (data as TxRow[]).map(toTx);
+  }
+  async createTransaction(i: TransactionInput) {
+    const { data, error } = await this.db
+      .from("transactions")
+      .insert({ kind: i.kind, amount: i.amount, currency: i.currency, category: i.category, date: i.date, note: i.note, client_id: i.clientId, project_id: i.projectId, invoice_id: i.invoiceId ?? null })
+      .select()
+      .single<TxRow>();
+    check(error);
+    return toTx(data!);
+  }
+  async deleteTransaction(id: string) {
+    const { error } = await this.db.from("transactions").delete().eq("id", id);
+    check(error);
+  }
+
+  async listInvoices() {
+    const { data, error } = await this.db.from("invoices").select("*").order("issue_date", { ascending: false }).limit(1000);
+    check(error);
+    return (data as InvoiceRow[]).map(toInvoice);
+  }
+  async createInvoice(i: NewInvoice) {
+    const { data, error } = await this.db
+      .from("invoices")
+      .insert({ client_id: i.clientId, project_id: i.projectId, number: i.number, issue_date: i.issueDate, due_date: i.dueDate, currency: i.currency, items: i.items, total: i.total, notes: i.notes })
+      .select()
+      .single<InvoiceRow>();
+    check(error);
+    return toInvoice(data!);
+  }
+  async updateInvoice(id: string, i: Omit<NewInvoice, "number" | "currency">) {
+    const { data, error } = await this.db
+      .from("invoices")
+      .update({ client_id: i.clientId, project_id: i.projectId, issue_date: i.issueDate, due_date: i.dueDate, items: i.items, total: i.total, notes: i.notes })
+      .eq("id", id)
+      .neq("status", "paid")
+      .select("id");
+    check(error);
+    if (!data?.length) throw new NotFoundError();
+  }
+  async setInvoiceStatus(id: string, status: InvoiceStatus, today: string) {
+    const { data: inv, error } = await this.db.from("invoices").select("*").eq("id", id).maybeSingle<InvoiceRow>();
+    check(error);
+    if (!inv) throw new NotFoundError();
+    if (inv.status === status) return;
+    const upd = await this.db.from("invoices").update({ status, paid_at: status === "paid" ? today : null }).eq("id", id);
+    check(upd.error);
+    if (status === "paid") {
+      const existing = await this.db.from("transactions").select("id").eq("invoice_id", id).limit(1);
+      check(existing.error);
+      if (!existing.data?.length) {
+        await this.createTransaction({
+          kind: "income",
+          amount: Number(inv.total),
+          currency: inv.currency,
+          category: "Project payment",
+          date: today,
+          note: `Invoice ${inv.number}`,
+          clientId: inv.client_id,
+          projectId: inv.project_id,
+          invoiceId: id,
+        });
+      }
+    } else if (inv.status === "paid") {
+      const del = await this.db.from("transactions").delete().eq("invoice_id", id);
+      check(del.error);
+    }
+  }
+  async deleteInvoice(id: string) {
+    const { error } = await this.db.from("invoices").delete().eq("id", id);
     check(error);
   }
 }
