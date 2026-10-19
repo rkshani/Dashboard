@@ -6,11 +6,12 @@ import type { WidgetType } from "@/templates/types";
 import type { Client, Invoice, Project, Task, Transaction } from "@/lib/data/types";
 import { fmtMoney, monthKey, monthLabel, shiftMonth } from "@/lib/money";
 import { daysBetween, relativeDay } from "@/lib/dates";
-import { sampleOpportunities } from "./sample-data";
+import type { FeedItem } from "@/lib/opportunities/types";
+import { timeAgo } from "@/components/app/views/OpportunitiesView";
 
 type WidgetConfig = Template["widgets"][number];
 const lower = (s: string) => (/^\d/.test(s) ? s : s[0].toLowerCase() + s.slice(1));
-export type WorkData = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; today: string };
+export type WorkData = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; feed: FeedItem[]; demoFeed: boolean; today: string };
 type WidgetProps = { template: Template; profile: Profile; widget: WidgetConfig; data: WorkData };
 
 const spanClass = { 1: "lg:col-span-1", 2: "lg:col-span-2", 3: "lg:col-span-3" } as const;
@@ -51,7 +52,11 @@ function Kpis({ template, data }: WidgetProps) {
     { label: "Due today", value: String(dueToday), note: overdue ? `${overdue} overdue` : "nothing overdue", tone: overdue ? "text-warn" : "text-good" },
     { label: `Active ${v.projects.toLowerCase()}`, value: String(activeProjects), note: dueSoon ? `${dueSoon} due this week` : "no deadlines this week", tone: dueSoon ? "text-accent" : "text-muted" },
     { label: `Active ${v.clients.toLowerCase()}`, value: String(activeClients), note: leads ? `${leads} ${leads === 1 ? "lead" : "leads"} in the pipeline` : "no open leads", tone: "text-muted" },
-    { label: `New ${v.opportunities.toLowerCase()}`, value: "12", note: "sample · feed coming soon", tone: "text-muted" },
+    (() => {
+      const fresh = data.feed.filter((o) => o.status === "new" && o.score >= 60);
+      const strong = fresh.filter((o) => o.score >= 80).length;
+      return { label: `New ${v.opportunities.toLowerCase()}`, value: String(fresh.length), note: strong ? `${strong} scored 80+` : "matched 60+", tone: strong ? "text-good" : "text-muted" };
+    })(),
   ];
   return (
     <div className="anim-rise grid grid-cols-2 gap-3 md:col-span-2 lg:col-span-3 lg:grid-cols-4">
@@ -66,31 +71,35 @@ function Kpis({ template, data }: WidgetProps) {
   );
 }
 
-function Opportunities({ template, profile, widget }: WidgetProps) {
-  const opps = sampleOpportunities(template, profile, widget.limit ?? 4);
+function Opportunities({ template, profile, widget, data }: WidgetProps) {
+  const top = data.feed.filter((o) => o.status === "new").slice(0, widget.limit ?? 4);
   return (
-    <Card title={widget.title ?? `New ${template.vocabulary.opportunities.toLowerCase()}`} href="/app/opportunities" span={widget.span} delay={80}>
+    <Card title={widget.title ?? `New ${template.vocabulary.opportunities.toLowerCase()}`} href="/app/opportunities" span={widget.span} delay={80} sample={data.demoFeed}>
       <p className="-mt-2 mb-3 flex items-center gap-2 text-xs text-muted">
         <span className="anim-pulse h-2 w-2 rounded-full bg-good" aria-hidden="true" />
         Matched to {profile.skills.slice(0, 3).join(", ") || "your profile"}
       </p>
-      <ul className="flex flex-col gap-1">
-        {opps.map((o, i) => (
-          <li key={o.id} className="anim-rise flex flex-wrap items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-surface-2" style={{ animationDelay: `${150 + i * 70}ms` }}>
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-2 font-mono text-sm text-accent" aria-label={`Match score ${o.score}`}>
-              {o.score}
-            </span>
-            <span className="min-w-0 flex-[1_1_200px]">
-              <span className="block truncate text-sm font-semibold">{o.title}</span>
-              <span className="block text-xs text-muted">{o.meta}</span>
-              <span className="mt-1.5 block h-1 max-w-60 overflow-hidden rounded bg-surface-2">
-                <span className="anim-fill block h-1 rounded bg-accent" style={{ width: `${o.score}%` }} />
+      {top.length === 0 ? (
+        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">No new matches right now. Add more skills in <Link href="/app/settings" className="text-accent hover:underline">Settings</Link> to widen the net.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {top.map((o, i) => (
+            <li key={o.id} className="anim-rise flex flex-wrap items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-surface-2" style={{ animationDelay: `${150 + i * 70}ms` }}>
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-2 font-mono text-sm text-accent" aria-label={`Match score ${o.score}`}>
+                {o.score}
               </span>
-            </span>
-            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-muted">{o.kind}</span>
-          </li>
-        ))}
-      </ul>
+              <span className="min-w-0 flex-[1_1_200px]">
+                <a href={o.url} target="_blank" rel="noopener" className="block truncate text-sm font-semibold hover:underline">{o.title}</a>
+                <span className="block truncate text-xs text-muted">{[o.company, o.remote ? "Remote" : o.location, timeAgo(o.postedAt), `via ${o.attribution.name}`].filter(Boolean).join(" · ")}</span>
+                <span className="mt-1.5 block h-1 max-w-60 overflow-hidden rounded bg-surface-2">
+                  <span className="anim-fill block h-1 rounded bg-accent" style={{ width: `${o.score}%` }} />
+                </span>
+              </span>
+              <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold uppercase text-muted">{o.kind === "lead" ? template.vocabulary.opportunity : "Job"}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }
@@ -207,15 +216,16 @@ function Projects({ template, widget, data }: WidgetProps) {
   );
 }
 
-function Pipeline({ widget }: WidgetProps) {
+function Pipeline({ widget, data }: WidgetProps) {
+  const count = (st: string[]) => data.feed.filter((o) => st.includes(o.status)).length;
   const stages = [
-    { n: 12, label: "New" },
-    { n: 5, label: "Contacted" },
-    { n: 3, label: "Proposal" },
-    { n: 2, label: "Won" },
+    { n: count(["saved"]), label: "Saved" },
+    { n: count(["contacted"]), label: "Contacted" },
+    { n: count(["proposal"]), label: "Proposal" },
+    { n: count(["won"]), label: "Won" },
   ];
   return (
-    <Card title={widget.title ?? "Pipeline"} href="/app/opportunities" span={widget.span} delay={240}>
+    <Card title={widget.title ?? "Pipeline"} href="/app/opportunities?tab=pipeline" span={widget.span} delay={240} sample={false}>
       <div className="grid grid-cols-2 gap-2">
         {stages.map((s) => (
           <div key={s.label} className="rounded-xl bg-surface-2 p-3 text-center">

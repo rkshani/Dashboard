@@ -8,6 +8,8 @@ import { TasksView } from "@/components/app/views/TasksView";
 import { FinanceView } from "@/components/app/views/FinanceView";
 import { InvoicesView } from "@/components/app/views/InvoicesView";
 import { monthKey } from "@/lib/money";
+import { OpportunitiesView } from "@/components/app/views/OpportunitiesView";
+import { getFeed } from "@/lib/opportunities/feed";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { getTemplate } from "@/templates";
@@ -51,6 +53,19 @@ async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module
     const sp = await searchParams;
     const view = sp.view === "list" ? "list" : "board";
     return <ProjectsView template={template} projects={projects} clients={clients} tasks={tasks} today={today} currency={profile.currency} view={view} />;
+  }
+
+  if (mod.id === "opportunities") {
+    const { repo } = await getRepo();
+    const { user } = await requireProfile();
+    const [items, sp] = await Promise.all([getFeed(repo, profile), searchParams]);
+    const tab = sp.tab === "pipeline" || sp.tab === "dismissed" ? sp.tab : "feed";
+    const minRaw = Number(sp.min);
+    const min = [0, 40, 60, 80].includes(minRaw) ? minRaw : 40;
+    const kind = sp.kind === "job" || sp.kind === "lead" ? sp.kind : "all";
+    const live = user.demo ? process.env.DEMO_LIVE_FEED === "1" : true;
+    const isDemoFeed = user.demo && (!live || items.every((i) => i.source === "demo"));
+    return <OpportunitiesView template={template} items={items} tab={tab} min={min} kind={kind} remoteOnly={sp.remote === "1"} demo={isDemoFeed} liveConfigured={!user.demo} />;
   }
 
   if (mod.id === "finance" || mod.id === "invoices") {

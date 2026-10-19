@@ -29,7 +29,7 @@ demo session (seeded with examples; restarting the server resets them).
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0004`).
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0005`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -59,6 +59,10 @@ demo session (seeded with examples; restarting the server resets them).
 | Finance (month view, chart, categories) and invoices (builder, print/PDF) | `src/components/app/views/FinanceView.tsx`, `InvoicesView.tsx`, `src/app/app/invoice/[id]/` |
 | Finance actions (paying an invoice records the income) | `src/app/app/finance-actions.ts` |
 | Storage interface + Supabase and demo implementations | `src/lib/data/` |
+| **Opportunity engine** (sources, parsing, skills, scoring, feed) | `src/lib/opportunities/` |
+| Scheduled collector endpoint | `src/app/api/cron/collect/route.ts`, `vercel.json` |
+| Opportunities feed + pipeline | `src/components/app/views/OpportunitiesView.tsx`, `src/app/app/opportunity-actions.ts` |
+| Unit tests (`npm test`) | `tests/` |
 | Database migrations | `supabase/migrations/` |
 
 ### Templates
@@ -87,10 +91,37 @@ settings with live template switching, and real **Clients**, **Projects** (Kanba
 **Tasks** (overdue / today / upcoming), **Finance** (income, expenses, categories, 6-month chart)
 and **Invoices** (line items, draft → sent → paid, print / save as PDF). Marking an invoice paid
 records the income automatically; undoing it removes that entry. Home KPIs, Today, Money and
-Active projects use real data; opportunities and pipeline still show labelled sample data.
+Active projects use real data.
 
-Next: the opportunity engine (collectors, matching, feed); Google Calendar sync; automations
-and the daily digest.
+The **opportunity engine** is live: scheduled collectors, de-duplication, explainable matching,
+a filterable feed and a pipeline (demo mode uses an example feed from fictional companies).
+
+Next: Google Calendar sync; automation rules UI and the daily email digest; AI-drafted proposals.
+
+### Opportunity engine
+
+1. **Collect.** Every 6 hours `/api/cron/collect` pulls public feeds: Remotive, Remote OK,
+   Arbeitnow, and any company career pages you list in `GREENHOUSE_BOARDS` / `LEVER_SITES`.
+   Each source has a pure parser in `sources/parsers.ts` (unit-tested). Failures are isolated per source.
+2. **Normalise.** HTML is stripped to plain text (never rendered), links must be http(s),
+   skills are read from titles, tags and descriptions using a skill dictionary.
+3. **De-duplicate.** The same role on several boards shares a fingerprint (company + title);
+   the company's own career page wins.
+4. **Store.** Postings go into the shared `opportunities` table with the service-role key.
+   Users can only read it; their own statuses live in `user_opportunities` (owner-only).
+   Postings older than 45 days that nobody kept are removed.
+5. **Match.** Each user's feed is scored on the fly (0–100) from skill overlap, title, remote
+   preference, work type and freshness, with plain-English reasons and cautions.
+   Close skills count too (Flutter → Dart, Jetpack Compose → Kotlin/Android).
+6. **Act.** Save, mark applied/contacted, dismiss; the pipeline runs Saved → Contacted →
+   Proposal → Won/Lost. Marking a lead "contacted" creates a follow-up task in 3 days.
+
+**Source rules we follow:** Remotive and Remote OK require crediting them with a link to the
+original posting (every card shows "via …" with that link); Remotive asks for at most ~4 fetches a
+day, hence the 6-hour schedule. No logged-in scraping of LinkedIn, Upwork or similar.
+Check each source's current terms before launch, and check your Vercel plan's cron frequency limits.
+
+Run the collector by hand: `curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain.com/api/cron/collect`
 
 ## Deploy
 

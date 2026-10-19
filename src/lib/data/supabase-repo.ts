@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NotFoundError, type NewInvoice, type Repo } from "./repo";
+import type { PipelineStatus, Posting, SourceId } from "@/lib/opportunities/types";
 import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 type ClientRow = { id: string; name: string; company: string | null; email: string | null; phone: string | null; status: Client["status"]; notes: string | null; created_at: string };
@@ -197,6 +198,52 @@ export class SupabaseRepo implements Repo {
   }
   async deleteInvoice(id: string) {
     const { error } = await this.db.from("invoices").delete().eq("id", id);
+    check(error);
+  }
+
+  // ---------------- Opportunities ----------------
+
+  async listPostings() {
+    const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const { data, error } = await this.db
+      .from("opportunities")
+      .select("id,source,fingerprint,kind,title,company,url,location,remote,tags,description,salary_min,salary_max,salary_currency,posted_at,attribution_name")
+      .gte("posted_at", since)
+      .order("posted_at", { ascending: false })
+      .limit(1500);
+    check(error);
+    type Row = { id: string; source: string; fingerprint: string; kind: "job" | "lead"; title: string; company: string; url: string; location: string; remote: boolean; tags: string[]; description: string; salary_min: number | null; salary_max: number | null; salary_currency: string | null; posted_at: string; attribution_name: string };
+    return (data as Row[]).map(
+      (r): Posting => ({
+        id: r.id,
+        source: r.source as SourceId,
+        externalId: r.id.split(":").slice(1).join(":"),
+        fingerprint: r.fingerprint,
+        kind: r.kind,
+        title: r.title,
+        company: r.company,
+        url: r.url,
+        location: r.location,
+        remote: r.remote,
+        tags: r.tags ?? [],
+        description: r.description,
+        salaryMin: r.salary_min === null ? null : Number(r.salary_min),
+        salaryMax: r.salary_max === null ? null : Number(r.salary_max),
+        salaryCurrency: r.salary_currency,
+        postedAt: r.posted_at,
+        attribution: { name: r.attribution_name, url: r.url },
+      }),
+    );
+  }
+  async listOpportunityStatuses() {
+    const { data, error } = await this.db.from("user_opportunities").select("opportunity_id,status").limit(5000);
+    check(error);
+    return Object.fromEntries((data ?? []).map((r) => [r.opportunity_id as string, r.status as PipelineStatus]));
+  }
+  async setOpportunityStatus(id: string, status: PipelineStatus) {
+    const { data: auth } = await this.db.auth.getUser();
+    if (!auth.user) throw new NotFoundError();
+    const { error } = await this.db.from("user_opportunities").upsert({ owner_id: auth.user.id, opportunity_id: id, status, updated_at: new Date().toISOString() }, { onConflict: "owner_id,opportunity_id" });
     check(error);
   }
 }

@@ -1,6 +1,8 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { NotFoundError, type NewInvoice, type Repo } from "./repo";
+import { demoPostings } from "@/lib/opportunities/fixtures";
+import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 /**
@@ -8,7 +10,7 @@ import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput
  * It lives in the server process: restarting the server resets it.
  * Capped so a public demo can't be used to fill memory.
  */
-type Store = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; touched: number };
+type Store = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; touched: number };
 const LIMIT = { sessions: 500, clients: 200, projects: 200, tasks: 1000, transactions: 2000, invoices: 300 };
 
 const g = globalThis as unknown as { __dashDemo?: Map<string, Store> };
@@ -27,6 +29,7 @@ function seed(today: string, currency: string): Store {
   const inv1 = randomUUID();
   return {
     touched: Date.now(),
+    oppStatus: {},
     clients: [
       { id: c1, name: "Ayesha Khan", company: "Northwind Retail", email: "ayesha@example.com", phone: null, status: "active", notes: "Prefers WhatsApp updates on Fridays.", createdAt: now },
       { id: c2, name: "Omar Siddiqui", company: "Bright Clinic", email: "omar@example.com", phone: null, status: "active", notes: null, createdAt: now },
@@ -73,6 +76,7 @@ function getStore(sessionId: string, today: string, currency: string): Store {
   s.touched = Date.now();
   s.transactions ??= [];
   s.invoices ??= [];
+  s.oppStatus ??= {};
   return s;
 }
 
@@ -198,4 +202,37 @@ export class DemoRepo implements Repo {
     this.s.invoices = this.s.invoices.filter((x) => x.id !== id);
     for (const t of this.s.transactions) if (t.invoiceId === id) t.invoiceId = null;
   }
+
+  // ---------------- Opportunities ----------------
+
+  async listPostings(): Promise<Posting[]> {
+    if (process.env.DEMO_LIVE_FEED === "1") {
+      const live = await liveFeed();
+      if (live.length) return live;
+    }
+    return demoPostings();
+  }
+  async listOpportunityStatuses() {
+    return { ...this.s.oppStatus };
+  }
+  async setOpportunityStatus(id: string, status: PipelineStatus) {
+    if (Object.keys(this.s.oppStatus).length > 3000) throw new Error("Demo limit reached");
+    this.s.oppStatus[id] = status;
+  }
+}
+
+/** Optional for local demos: DEMO_LIVE_FEED=1 pulls the real public feeds into memory (6h cache). */
+const gl = globalThis as unknown as { __dashLive?: { at: number; postings: Posting[]; pending?: Promise<Posting[]> } };
+async function liveFeed(): Promise<Posting[]> {
+  const c = gl.__dashLive;
+  if (c && Date.now() - c.at < 6 * 3_600_000 && c.postings.length) return c.postings;
+  if (c?.pending) return c.pending;
+  const { collectAll } = await import("@/lib/opportunities/sources");
+  const pending = collectAll()
+    .then((r) => r.postings)
+    .catch(() => [] as Posting[]);
+  gl.__dashLive = { at: c?.at ?? 0, postings: c?.postings ?? [], pending };
+  const postings = await pending;
+  gl.__dashLive = { at: Date.now(), postings };
+  return postings;
 }

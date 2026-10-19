@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { WidgetGrid } from "@/components/widgets/Widgets";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
+import { getFeed } from "@/lib/opportunities/feed";
 import { getTemplate } from "@/templates";
 
 export default function HomePage() {
@@ -23,10 +24,11 @@ function greeting(timezone: string) {
 }
 
 async function Home() {
-  const { profile } = await requireProfile();
+  const { user, profile } = await requireProfile();
   const template = getTemplate(profile.templateId);
   const { repo, today: todayIso } = await getRepo();
-  const [clients, projects, tasks, transactions, invoices] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTasks(), repo.listTransactions(), repo.listInvoices()]);
+  const [clients, projects, tasks, transactions, invoices, feed] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTasks(), repo.listTransactions(), repo.listInvoices(), getFeed(repo, profile)]);
+  const demoFeed = user.demo && feed.every((o) => o.source === "demo");
   let today = "";
   try {
     today = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: profile.timezone }).format(new Date());
@@ -45,7 +47,7 @@ async function Home() {
           Widgets marked <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold">Sample</span> show example data until that module is connected.
         </p>
       </header>
-      <WidgetGrid template={template} profile={profile} data={{ clients, projects, tasks, transactions, invoices, today: todayIso }} />
+      <WidgetGrid template={template} profile={profile} data={{ clients, projects, tasks, transactions, invoices, feed, demoFeed, today: todayIso }} />
     </div>
   );
 }

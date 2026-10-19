@@ -1,5 +1,7 @@
 import type { Client, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
+import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
+
 export type NewInvoice = InvoiceInput & { number: string; currency: string; total: number };
 
 /**
@@ -34,6 +36,11 @@ export interface Repo {
   /** Marking paid records the income once; moving back from paid removes that income entry. */
   setInvoiceStatus(id: string, status: InvoiceStatus, today: string): Promise<void>;
   deleteInvoice(id: string): Promise<void>;
+
+  /** Recent postings from the shared pool (collected by the scheduled job, or the demo feed). */
+  listPostings(): Promise<Posting[]>;
+  listOpportunityStatuses(): Promise<Record<string, PipelineStatus>>;
+  setOpportunityStatus(id: string, status: PipelineStatus): Promise<void>;
 }
 
 export class NotFoundError extends Error {}
