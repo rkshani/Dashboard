@@ -3,8 +3,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
 /** Fades content up when it scrolls into view. Respects reduced-motion via CSS. */
-export function Reveal({ children, className = "", delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
-  const ref = useRef<HTMLDivElement>(null);
+export function Reveal({ children, className = "", delay = 0, as = "div" }: { children: ReactNode; className?: string; delay?: number; as?: "div" | "li" }) {
+  const ref = useRef<HTMLDivElement & HTMLLIElement>(null);
 
   useEffect(() => {
     const el = ref.current;
@@ -28,9 +28,10 @@ export function Reveal({ children, className = "", delay = 0 }: { children: Reac
     return () => io.disconnect();
   }, []);
 
+  const Tag = as;
   return (
-    <div ref={ref} className={`reveal ${className}`} style={{ transitionDelay: `${delay}ms` }}>
+    <Tag ref={ref} className={`reveal ${className}`} style={{ transitionDelay: `${delay}ms` }}>
       {children}
-    </div>
+    </Tag>
   );
 }

@@ -24,8 +24,8 @@
   --muted: #566074;
   --accent: #2f5bea;
   --accent-text: #ffffff;
-  --good: #128a55;
-  --warn: #9a5b00;
+  --good: #0a6640;
+  --warn: #8a5000;
   color-scheme: light;
 }
 [data-theme="forest"] {

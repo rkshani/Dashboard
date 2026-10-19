@@ -4,6 +4,7 @@ import { DemoRepo } from "@/lib/data/demo-repo";
 import { decrypt, encryptionConfigured } from "@/lib/crypto";
 import { accessTokenFor, createEvent, GoogleError, googleConfigured, listEvents } from "@/lib/google/calendar";
 import type { CalEvent, NewEvent } from "./types";
+import { tzOffsetMinutes } from "@/lib/dates";
 
 export type CalendarState =
   | { mode: "demo" }
@@ -17,18 +18,6 @@ export type Calendar = {
   list(from: Date, to: Date): Promise<CalEvent[]>;
   create(e: NewEvent): Promise<CalEvent>;
 };
-
-function tzOffsetMinutes(timezone: string, at = new Date()) {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "longOffset" }).formatToParts(at);
-    const off = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT";
-    const m = /GMT([+-])(\d{2}):?(\d{2})?/.exec(off);
-    if (!m) return 0;
-    return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] ?? 0));
-  } catch {
-    return 0;
-  }
-}
 
 /** The signed-in user's calendar: Google when connected, example events in demo mode. */
 export async function getCalendar(repo: Repo, ownerId: string, timezone: string): Promise<Calendar> {

@@ -83,7 +83,7 @@ function Opportunities({ template, profile, widget, data }: WidgetProps) {
         Matched to {profile.skills.slice(0, 3).join(", ") || "your profile"}
       </p>
       {top.length === 0 ? (
-        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">No new matches right now. Add more skills in <Link href="/app/settings" className="text-accent hover:underline">Settings</Link> to widen the net.</p>
+        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">No new matches right now. Add more skills in <Link href="/app/settings" className="text-accent underline">Settings</Link> to widen the net.</p>
       ) : (
         <ul className="flex flex-col gap-1">
           {top.map((o, i) => (
@@ -117,7 +117,7 @@ function Today({ widget, data }: WidgetProps) {
   return (
     <Card title={widget.title ?? "Today"} href="/app/tasks" span={widget.span} delay={120} sample={false}>
       {events.length === 0 && tasks.length === 0 ? (
-        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">Nothing due today. <Link href="/app/tasks" className="text-accent hover:underline">Add a task</Link></p>
+        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">Nothing due today. <Link href="/app/tasks" className="text-accent underline">Add a task</Link></p>
       ) : (
         <ul className="flex flex-col">
           {events.map((e) => (
@@ -149,7 +149,7 @@ function Today({ widget, data }: WidgetProps) {
       )}
       {data.calendarMode === "disconnected" && (
         <p className="mt-3 text-xs text-muted">
-          <Link href="/app/calendar" className="text-accent hover:underline">Connect Google Calendar</Link> to see meetings here.
+          <Link href="/app/calendar" className="text-accent underline">Connect Google Calendar</Link> to see meetings here.
         </p>
       )}
     </Card>
@@ -160,12 +160,12 @@ function Money({ widget, template, profile, data }: WidgetProps) {
   const thisMonth = monthKey(data.today);
   const months = Array.from({ length: 6 }, (_, i) => shiftMonth(thisMonth, i - 5));
   const series = months.map((m) => {
-    const tx = data.transactions.filter((t) => monthKey(t.date) === m);
+    const tx = data.transactions.filter((t) => monthKey(t.date) === m && t.currency === profile.currency);
     return { m, inc: tx.filter((t) => t.kind === "income").reduce((a, t) => a + t.amount, 0), exp: tx.filter((t) => t.kind === "expense").reduce((a, t) => a + t.amount, 0) };
   });
   const peak = Math.max(1, ...series.flatMap((x) => [x.inc, x.exp]));
   const now = series[series.length - 1];
-  const unpaid = data.invoices.filter((i) => i.status === "sent");
+  const unpaid = data.invoices.filter((i) => i.status === "sent" && i.currency === profile.currency);
   const unpaidTotal = unpaid.reduce((a, i) => a + i.total, 0);
   const href = template.modules.some((m) => m.id === "finance") ? "/app/finance" : template.modules.some((m) => m.id === "invoices") ? "/app/invoices" : undefined;
   return (
@@ -215,7 +215,7 @@ function Projects({ template, widget, data }: WidgetProps) {
   return (
     <Card title={widget.title ?? `Active ${v.projects.toLowerCase()}`} href="/app/projects" span={widget.span} delay={200} sample={false}>
       {items.length === 0 ? (
-        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">No open {v.projects.toLowerCase()}. <Link href="/app/projects" className="text-accent hover:underline">Add one</Link></p>
+        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">No open {v.projects.toLowerCase()}. <Link href="/app/projects" className="text-accent underline">Add one</Link></p>
       ) : (
         <ul className="flex flex-col gap-4">
           {items.map((p) => (

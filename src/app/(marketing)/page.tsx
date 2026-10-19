@@ -99,12 +99,10 @@ export default function Home() {
           <SectionHeading id="how-title" eyebrow="How it works" title="Four steps, then it runs itself" />
           <ol className="mt-12 grid gap-4 md:grid-cols-4">
             {steps.map((s, i) => (
-              <Reveal key={s.n} delay={i * 80}>
-                <li className="h-full list-none rounded-2xl border border-line bg-bg p-6">
-                  <span className="font-mono text-sm text-accent">{s.n}</span>
-                  <h3 className="mt-3 font-display text-lg font-semibold">{s.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
-                </li>
+              <Reveal key={s.n} delay={i * 80} as="li" className="h-full list-none rounded-2xl border border-line bg-bg p-6">
+                <span className="font-mono text-sm text-accent">{s.n}</span>
+                <h3 className="mt-3 font-display text-lg font-semibold">{s.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
               </Reveal>
             ))}
           </ol>

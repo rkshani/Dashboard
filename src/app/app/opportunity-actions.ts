@@ -23,8 +23,7 @@ export async function setOpportunityStatus(fd: FormData) {
   const { profile } = await requireProfile();
 
   // Only act on postings that actually exist in this user's feed.
-  const postings = await repo.listPostings();
-  const posting = postings.find((p) => p.id === parsed.data.id);
+  const posting = await repo.getPosting(parsed.data.id);
   if (!posting) return;
 
   await repo.setOpportunityStatus(posting.id, parsed.data.status);

@@ -10,8 +10,8 @@ import type { Template } from "@/templates";
 
 export function FinanceView({
   template,
-  transactions,
-  invoices,
+  transactions: allTransactions,
+  invoices: allInvoices,
   clients,
   today,
   currency,
@@ -27,7 +27,12 @@ export function FinanceView({
   month: string;
   title: string;
 }) {
-  const inMonth = transactions.filter((t) => monthKey(t.date) === month);
+  // Totals only add up amounts in the profile currency; other currencies are listed but not summed.
+  const otherCurrency = allTransactions.filter((t) => t.currency !== currency);
+  const inMonthAll = allTransactions.filter((t) => monthKey(t.date) === month);
+  const inMonth = inMonthAll.filter((t) => t.currency === currency);
+  const transactions = allTransactions.filter((t) => t.currency === currency);
+  const invoices = allInvoices.filter((i) => i.currency === currency);
   const income = inMonth.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
   const expenses = inMonth.filter((t) => t.kind === "expense").reduce((s, t) => s + t.amount, 0);
   const net = income - expenses;
@@ -66,7 +71,10 @@ export function FinanceView({
       <header className="anim-rise flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-semibold tracking-tight">{title}</h1>
-          <p className="text-sm text-muted">All amounts in {currency}</p>
+          <p className="text-sm text-muted">
+            Totals in {currency}
+            {otherCurrency.length > 0 && <> · {otherCurrency.length} entries in other currencies are listed but not added up</>}
+          </p>
         </div>
         <nav aria-label="Month" className="flex items-center gap-1 rounded-xl border border-line bg-surface p-1">
           <Link href={`?m=${shiftMonth(month, -1)}`} aria-label="Previous month" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink">
@@ -94,7 +102,7 @@ export function FinanceView({
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <section aria-label="Last six months" className="anim-rise rounded-2xl border border-line bg-surface p-5 lg:col-span-2" style={{ animationDelay: "150ms" }}>
+        <section aria-label="Last six months" className="anim-rise min-w-0 rounded-2xl border border-line bg-surface p-5 lg:col-span-2" style={{ animationDelay: "150ms" }}>
           <h2 className="font-display text-lg font-semibold">Last 6 months</h2>
           <div className="mt-4 flex h-48 items-end gap-3">
             {series.map((s, i) => (
@@ -126,7 +134,7 @@ export function FinanceView({
           </table>
         </section>
 
-        <section aria-label="Spending by category" className="anim-rise rounded-2xl border border-line bg-surface p-5" style={{ animationDelay: "200ms" }}>
+        <section aria-label="Spending by category" className="anim-rise min-w-0 rounded-2xl border border-line bg-surface p-5" style={{ animationDelay: "200ms" }}>
           <h2 className="font-display text-lg font-semibold">Spending by category</h2>
           {byCat.length === 0 ? (
             <p className="mt-4 text-sm text-muted">No expenses this month.</p>
@@ -146,12 +154,12 @@ export function FinanceView({
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-5">
-        <section aria-label="Add a transaction" className="anim-rise rounded-2xl border border-line bg-surface p-5 lg:col-span-2" style={{ animationDelay: "250ms" }}>
+        <section aria-label="Add a transaction" className="anim-rise min-w-0 rounded-2xl border border-line bg-surface p-5 lg:col-span-2" style={{ animationDelay: "250ms" }}>
           <h2 className="mb-4 font-display text-lg font-semibold">Add a transaction</h2>
           <TransactionForm today={today} currency={currency} clients={clients.map((c) => ({ id: c.id, name: c.name }))} incomeLabel={incomeLabel} />
         </section>
 
-        <section aria-label="Transactions" className="anim-rise rounded-2xl border border-line bg-surface p-5 lg:col-span-3" style={{ animationDelay: "300ms" }}>
+        <section aria-label="Transactions" className="anim-rise min-w-0 rounded-2xl border border-line bg-surface p-5 lg:col-span-3" style={{ animationDelay: "300ms" }}>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold">{monthLabel(month)}</h2>
             {unpaid.length > 0 && (
@@ -160,11 +168,11 @@ export function FinanceView({
               </Link>
             )}
           </div>
-          {inMonth.length === 0 ? (
+          {inMonthAll.length === 0 ? (
             <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">Nothing recorded this month yet.</p>
           ) : (
             <ul className="divide-y divide-line">
-              {[...inMonth].sort((a, b) => b.date.localeCompare(a.date)).map((t) => (
+              {[...inMonthAll].sort((a, b) => b.date.localeCompare(a.date)).map((t) => (
                 <li key={t.id} className="flex items-center gap-3 py-2.5">
                   <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${t.kind === "income" ? "bg-good/15 text-good" : "bg-warn/15 text-warn"}`} aria-hidden="true">
                     {t.kind === "income" ? "↓" : "↑"}
@@ -179,7 +187,7 @@ export function FinanceView({
                     {t.kind === "income" ? "+" : "−"}
                     {fmtMoney(t.amount, t.currency)}
                   </span>
-                  <MiniAction action={deleteTransaction} fields={{ id: t.id }} label="Delete transaction" confirm={t.invoiceId ? "This came from a paid invoice. Delete it anyway?" : undefined}>
+                  <MiniAction action={deleteTransaction} fields={{ id: t.id }} label="Delete transaction" confirm={t.invoiceId ? "This came from a paid invoice. Deleting it marks that invoice unpaid again. Continue?" : undefined}>
                     <Icon name="close" className="h-4 w-4" />
                   </MiniAction>
                 </li>

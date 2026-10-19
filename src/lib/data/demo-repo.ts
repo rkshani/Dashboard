@@ -24,7 +24,7 @@ function addDays(base: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
-function seed(today: string, currency: string): Store {
+function seed(today: string, currency: string, tzOffset: number): Store {
   const now = new Date().toISOString();
   const c1 = randomUUID(), c2 = randomUUID();
   const p1 = randomUUID(), p2 = randomUUID(), p3 = randomUUID();
@@ -34,7 +34,7 @@ function seed(today: string, currency: string): Store {
     oppStatus: {},
     settings: { ...DEFAULT_SETTINGS },
     log: [],
-    events: demoEvents(today),
+    events: demoEvents(today, tzOffset),
     clients: [
       { id: c1, name: "Ayesha Khan", company: "Northwind Retail", email: "ayesha@example.com", phone: null, status: "active", notes: "Prefers WhatsApp updates on Fridays.", createdAt: now },
       { id: c2, name: "Omar Siddiqui", company: "Bright Clinic", email: "omar@example.com", phone: null, status: "active", notes: null, createdAt: now },
@@ -68,14 +68,14 @@ function seed(today: string, currency: string): Store {
   };
 }
 
-function getStore(sessionId: string, today: string, currency: string): Store {
+function getStore(sessionId: string, today: string, currency: string, tzOffset: number): Store {
   let s = stores.get(sessionId);
   if (!s) {
     if (stores.size >= LIMIT.sessions) {
       const oldest = [...stores.entries()].sort((a, b) => a[1].touched - b[1].touched)[0];
       if (oldest) stores.delete(oldest[0]);
     }
-    s = seed(today, currency);
+    s = seed(today, currency, tzOffset);
     stores.set(sessionId, s);
   }
   s.touched = Date.now();
@@ -84,15 +84,15 @@ function getStore(sessionId: string, today: string, currency: string): Store {
   s.oppStatus ??= {};
   s.settings ??= { ...DEFAULT_SETTINGS };
   s.log ??= [];
-  s.events ??= demoEvents(today);
+  s.events ??= demoEvents(today, tzOffset);
   return s;
 }
 
 /** A few example meetings around "today" so the calendar isn't empty in the demo. */
-function demoEvents(today: string): CalEvent[] {
+function demoEvents(today: string, tzOffset: number): CalEvent[] {
   const at = (days: number, hh: number, mm: number, mins: number) => {
     const d = new Date(`${addDays(today, days)}T00:00:00Z`);
-    d.setUTCHours(hh - 5, mm); // shown in Asia/Karachi-ish local time for the demo
+    d.setUTCMinutes(hh * 60 + mm - tzOffset); // local wall-clock time in the user's zone
     const end = new Date(d.getTime() + mins * 60_000);
     return { start: d.toISOString(), end: end.toISOString() };
   };
@@ -110,8 +110,13 @@ function cap(n: number, max: number) {
 
 export class DemoRepo implements Repo {
   private s: Store;
-  constructor(sessionId: string, today: string, currency: string) {
-    this.s = getStore(sessionId, today, currency);
+  constructor(
+    private sessionId: string,
+    today: string,
+    currency: string,
+    private tzOffset = 300,
+  ) {
+    this.s = getStore(sessionId, today, currency, tzOffset);
   }
 
   async listClients() {
@@ -236,6 +241,9 @@ export class DemoRepo implements Repo {
     }
     return demoPostings();
   }
+  async getPosting(id: string) {
+    return (await this.listPostings()).find((p) => p.id === id) ?? null;
+  }
   async listOpportunityStatuses() {
     return { ...this.s.oppStatus };
   }
@@ -273,7 +281,12 @@ export class DemoRepo implements Repo {
   listDemoEvents(): CalEvent[] {
     return [...this.s.events];
   }
-  createDemoEvent(e: NewEvent, timezoneOffsetMin = 300): CalEvent {
+  /** Forget everything for this demo session (used by "Delete my account"). */
+  destroy() {
+    stores.delete(this.sessionId);
+  }
+
+  createDemoEvent(e: NewEvent, timezoneOffsetMin = this.tzOffset): CalEvent {
     cap(this.s.events.length, 300);
     let start: string, end: string;
     if (e.startTime) {

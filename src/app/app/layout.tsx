@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Sidebar } from "@/components/app/Sidebar";
+import { ProfileTheme } from "@/components/app/ProfileTheme";
 import { requireProfile } from "@/lib/auth";
 import { site } from "@/lib/site";
 import { getTemplate } from "@/templates";
@@ -31,5 +32,10 @@ async function AppNav() {
     ...template.modules.map((m) => ({ href: `/app/${m.id}`, label: m.label, icon: m.icon })),
     { href: "/app/settings", label: "Settings", icon: "settings" },
   ];
-  return <Sidebar items={items} appName={site.name} templateName={template.name} demo={user.demo} />;
+  return (
+    <>
+      <ProfileTheme theme={profile.theme} />
+      <Sidebar items={items} appName={site.name} templateName={template.name} demo={user.demo} />
+    </>
+  );
 }

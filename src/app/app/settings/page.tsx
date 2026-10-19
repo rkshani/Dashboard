@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { ProfileWizard } from "@/components/onboarding/ProfileWizard";
 import { requireProfile } from "@/lib/auth";
 import { templateSummaries } from "@/lib/template-summary";
+import { DangerZone } from "@/components/app/DangerZone";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -31,9 +32,16 @@ async function SettingsBody({ searchParams }: { searchParams: PageProps<"/app/se
       <div className="mt-6 rounded-3xl border border-line bg-surface p-6 sm:p-8">
         <ProfileWizard templates={templateSummaries()} existing={profile} mode="settings" />
       </div>
-      <section className="mt-6 rounded-2xl border border-line bg-surface p-6 text-sm">
-        <h2 className="font-display text-lg font-semibold">Account</h2>
-        <p className="mt-2 text-muted">{user.demo ? "Demo mode: nothing is stored on a server." : `Signed in as ${user.email}`}</p>
+      <section aria-label="Account and data" className="mt-6 rounded-2xl border border-line bg-surface p-6 text-sm">
+        <h2 className="font-display text-lg font-semibold">Account and your data</h2>
+        <p className="mt-2 text-muted">{user.demo ? "Demo mode: data lives in server memory for this browser session only." : `Signed in as ${user.email}`}</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <a href="/api/account/export" className="lift flex h-11 items-center rounded-xl border border-line px-4 font-medium hover:border-accent">
+            Export my data (JSON)
+          </a>
+          <span className="text-xs text-muted">Everything we hold about you, in one file.</span>
+        </div>
+        <DangerZone />
       </section>
     </>
   );

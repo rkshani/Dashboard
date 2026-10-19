@@ -28,3 +28,16 @@ export function relativeDay(date: string, today: string): string {
   if (diff < -1 && diff >= -6) return `${-diff} days ago`;
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
 }
+
+/** Current UTC offset of a time zone in minutes (e.g. Asia/Karachi → 300). */
+export function tzOffsetMinutes(timezone: string, at = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "longOffset" }).formatToParts(at);
+    const off = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT";
+    const m = /GMT([+-])(\d{2}):?(\d{2})?/.exec(off);
+    if (!m) return 0;
+    return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] ?? 0));
+  } catch {
+    return 0;
+  }
+}

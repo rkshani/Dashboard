@@ -40,6 +40,7 @@ export interface Repo {
 
   /** Recent postings from the shared pool (collected by the scheduled job, or the demo feed). */
   listPostings(): Promise<Posting[]>;
+  getPosting(id: string): Promise<Posting | null>;
   listOpportunityStatuses(): Promise<Record<string, PipelineStatus>>;
   setOpportunityStatus(id: string, status: PipelineStatus): Promise<void>;
 

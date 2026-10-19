@@ -42,6 +42,28 @@ const toProject = (r: ProjectRow): Project => ({
 });
 const toTask = (r: TaskRow): Task => ({ id: r.id, projectId: r.project_id, title: r.title, dueDate: r.due_date, priority: r.priority, done: r.done, doneAt: r.done_at, createdAt: r.created_at });
 
+const POSTING_COLS = "id,source,fingerprint,kind,title,company,url,location,remote,tags,description,salary_min,salary_max,salary_currency,posted_at,attribution_name";
+type PostingRow = { id: string; source: string; fingerprint: string; kind: "job" | "lead"; title: string; company: string; url: string; location: string; remote: boolean; tags: string[]; description: string; salary_min: number | null; salary_max: number | null; salary_currency: string | null; posted_at: string; attribution_name: string };
+const toPosting = (r: PostingRow): Posting => ({
+  id: r.id,
+  source: r.source as SourceId,
+  externalId: r.id.split(":").slice(1).join(":"),
+  fingerprint: r.fingerprint,
+  kind: r.kind,
+  title: r.title,
+  company: r.company,
+  url: r.url,
+  location: r.location,
+  remote: r.remote,
+  tags: r.tags ?? [],
+  description: r.description,
+  salaryMin: r.salary_min === null ? null : Number(r.salary_min),
+  salaryMax: r.salary_max === null ? null : Number(r.salary_max),
+  salaryCurrency: r.salary_currency,
+  postedAt: r.posted_at,
+  attribution: { name: r.attribution_name, url: r.url },
+});
+
 function check(error: { message: string; code?: string } | null) {
   if (error) {
     console.error("[db]", error.code, error.message);
@@ -215,35 +237,14 @@ export class SupabaseRepo implements Repo {
 
   async listPostings() {
     const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-    const { data, error } = await this.db
-      .from("opportunities")
-      .select("id,source,fingerprint,kind,title,company,url,location,remote,tags,description,salary_min,salary_max,salary_currency,posted_at,attribution_name")
-      .gte("posted_at", since)
-      .order("posted_at", { ascending: false })
-      .limit(1500);
+    const { data, error } = await this.db.from("opportunities").select(POSTING_COLS).gte("posted_at", since).order("posted_at", { ascending: false }).limit(1500);
     check(error);
-    type Row = { id: string; source: string; fingerprint: string; kind: "job" | "lead"; title: string; company: string; url: string; location: string; remote: boolean; tags: string[]; description: string; salary_min: number | null; salary_max: number | null; salary_currency: string | null; posted_at: string; attribution_name: string };
-    return (data as Row[]).map(
-      (r): Posting => ({
-        id: r.id,
-        source: r.source as SourceId,
-        externalId: r.id.split(":").slice(1).join(":"),
-        fingerprint: r.fingerprint,
-        kind: r.kind,
-        title: r.title,
-        company: r.company,
-        url: r.url,
-        location: r.location,
-        remote: r.remote,
-        tags: r.tags ?? [],
-        description: r.description,
-        salaryMin: r.salary_min === null ? null : Number(r.salary_min),
-        salaryMax: r.salary_max === null ? null : Number(r.salary_max),
-        salaryCurrency: r.salary_currency,
-        postedAt: r.posted_at,
-        attribution: { name: r.attribution_name, url: r.url },
-      }),
-    );
+    return (data as PostingRow[]).map(toPosting);
+  }
+  async getPosting(id: string) {
+    const { data, error } = await this.db.from("opportunities").select(POSTING_COLS).eq("id", id).maybeSingle<PostingRow>();
+    check(error);
+    return data ? toPosting(data) : null;
   }
   async listOpportunityStatuses() {
     const { data, error } = await this.db.from("user_opportunities").select("opportunity_id,status").eq("owner_id", this.owner).limit(5000);

@@ -183,13 +183,13 @@ export function OpportunitiesView({
                 {k === "all" ? "All" : k === "job" ? "Jobs" : v.opportunities}
               </Link>
             ))}
-            <Link href={qs({ remote: remoteOnly ? undefined : "1" })} aria-pressed={remoteOnly} className={`h-9 rounded-lg border px-3 leading-9 ${remoteOnly ? "border-accent text-accent" : "border-line text-muted hover:text-ink"}`}>
+            <Link href={qs({ remote: remoteOnly ? undefined : "1" })} aria-current={remoteOnly ? "true" : undefined} className={`h-9 rounded-lg border px-3 leading-9 ${remoteOnly ? "border-accent text-accent" : "border-line text-muted hover:text-ink"}`}>
               Remote only
             </Link>
           </div>
           {feed.length === 0 ? (
             <div className="mt-6 rounded-2xl border border-dashed border-line p-10 text-center text-muted">
-              Nothing new at this score. Try a lower filter, or add more skills in <Link href="/app/settings" className="text-accent hover:underline">Settings</Link>.
+              Nothing new at this score. Try a lower filter, or add more skills in <Link href="/app/settings" className="text-accent underline">Settings</Link>.
             </div>
           ) : (
             <ul className="mt-5 grid gap-3 lg:grid-cols-2">

@@ -43,8 +43,12 @@ export async function addTransaction(_prev: FormState, fd: FormData): Promise<Fo
 export async function deleteTransaction(fd: FormData) {
   const id = idSchema.safeParse(fd.get("id"));
   if (!id.success) return;
-  const { repo } = await getRepo();
-  await run(() => repo.deleteTransaction(id.data), "Deleted.");
+  const { repo, today } = await getRepo();
+  const tx = (await repo.listTransactions()).find((t) => t.id === id.data);
+  if (!tx) return;
+  // Income that came from a paid invoice: un-pay the invoice too, so the two never disagree.
+  if (tx.invoiceId) await run(() => repo.setInvoiceStatus(tx.invoiceId!, "sent", today), "Invoice marked unpaid.");
+  else await run(() => repo.deleteTransaction(id.data), "Deleted.");
 }
 
 function nextNumber(existing: string[]) {

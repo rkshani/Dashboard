@@ -9,8 +9,9 @@ import { rowToProfile, type ProfileRow } from "@/lib/profile";
 import { getTemplate } from "@/templates";
 
 /**
- * Hourly job: for every onboarded user, run their automation rules, and if it is their chosen
- * hour in their own time zone (and today's digest hasn't gone out), email the daily digest.
+ * Hourly job: for every onboarded user, run their automation rules, and once it is at or past their
+ * chosen hour in their own time zone (and today's digest hasn't gone out), email the daily digest.
+ * "At or past" means a missed or late cron run still delivers today's digest.
  * Uses the service-role key, so every query goes through SupabaseRepo, which filters by owner.
  */
 export const maxDuration = 300;
@@ -46,7 +47,7 @@ export async function GET(req: Request) {
       stats.actions += done.length;
 
       const settings = await repo.getAutomationSettings();
-      const due = ruleEnabled(template, settings, "morning-digest") && localHour(profile.timezone) === settings.digestHour && settings.lastDigestOn !== today;
+      const due = ruleEnabled(template, settings, "morning-digest") && localHour(profile.timezone) >= settings.digestHour && settings.lastDigestOn !== today;
       if (due && emailConfigured()) {
         const { data: u } = await db.auth.admin.getUserById(row.id);
         const email = u.user?.email;
