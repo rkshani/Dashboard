@@ -22,7 +22,7 @@ export function DashboardPreview() {
   return (
     <div
       role="img"
-      aria-label="Preview of the PilotDesk dashboard showing matched opportunities, today's schedule and a monthly money chart"
+      aria-label="Preview of the dashboard showing matched opportunities, today's schedule and a monthly money chart"
       className="anim-rise relative rounded-3xl border border-line bg-surface p-3 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.6)] sm:p-4"
       style={{ animationDelay: "0.15s" }}
     >

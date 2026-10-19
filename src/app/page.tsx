@@ -18,7 +18,7 @@ const features = [
 
 const steps = [
   { n: "01", title: "Pick your field", body: "Choose a template, add your skills, rate and the kind of work you want." },
-  { n: "02", title: "Connect your calendar", body: "Sign in with Google. PilotDesk only asks for the access a feature needs." },
+  { n: "02", title: "Connect your calendar", body: "Sign in with Google. Only the access a feature needs is ever requested." },
   { n: "03", title: "Let automation work", body: "Postings are collected, de-duplicated, scored and delivered in a morning digest." },
   { n: "04", title: "Act in one place", body: "Save, draft a proposal, plan the work, track the client and get paid." },
 ];
@@ -77,7 +77,7 @@ export default function Home() {
 
       {/* Features */}
       <section id="features" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20 sm:px-6" aria-labelledby="features-title">
-        <SectionHeading id="features-title" eyebrow="Features" title="Stop running your work from ten tabs" intro="Free tools already handle email and to-do lists. PilotDesk adds what they don't: zero setup and opportunities that find you." />
+        <SectionHeading id="features-title" eyebrow="Features" title="Stop running your work from ten tabs" intro={`Free tools already handle email and to-do lists. ${site.name} adds what they don't: zero setup and opportunities that find you.`} />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((f, i) => (
             <Reveal key={f.title} delay={i * 60}>
@@ -164,7 +164,7 @@ export default function Home() {
               <Icon name="shield" />
             </span>
             <h2 id="security-title" className="mt-4 font-display text-3xl font-semibold tracking-tight">Built to be trusted with your work</h2>
-            <p className="mt-3 text-muted">PilotDesk will hold your calendar, clients and money. Security is part of the design, not an afterthought.</p>
+            <p className="mt-3 text-muted">{site.name} will hold your calendar, clients and money. Security is part of the design, not an afterthought.</p>
           </Reveal>
           <Reveal delay={100}>
             <ul className="space-y-3">

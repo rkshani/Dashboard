@@ -1,6 +1,6 @@
-# PilotDesk — landing page + waitlist
+# Dashboard — landing page + waitlist
 
-Phase 0 of PilotDesk (working name): a fast, SEO/AEO/GEO-ready marketing site with a
+Phase 0 of Dashboard (working name; change it in `src/lib/site.ts`): a fast, SEO/AEO/GEO-ready marketing site with a
 waitlist backed by Supabase. The dashboard app comes next in this same repo.
 
 ## Stack

@@ -1,10 +1,10 @@
 export const site = {
-  name: "PilotDesk",
+  name: "Dashboard", // working name — change it here and it updates everywhere
   tagline: "Your whole work life on one dashboard, set up for your profession.",
   description:
-    "PilotDesk is a role-based all-in-one dashboard. Pick your profession and get tasks, projects, clients, meetings, money and an auto-fetched feed of matched leads and jobs in one place.",
-  url: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://pilotdesk.app").replace(/\/$/, ""),
-  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "hello@pilotdesk.app",
+    "A role-based all-in-one dashboard. Pick your profession and get tasks, projects, clients, meetings, money and an auto-fetched feed of matched leads and jobs in one place.",
+  url: (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, ""),
+  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "hello@example.com",
 };
 
 export type Role = {
@@ -73,24 +73,24 @@ export const roles: Role[] = [
 
 export const faqs: { q: string; a: string }[] = [
   {
-    q: "What is PilotDesk?",
-    a: "PilotDesk is an all-in-one dashboard that sets itself up for your profession. You pick your role, connect your calendar, and get tasks, projects, clients, meetings, money tracking and a feed of matched leads and jobs in one place.",
+    q: `What is ${site.name}?`,
+    a: `${site.name} is an all-in-one dashboard that sets itself up for your profession. You pick your role, connect your calendar, and get tasks, projects, clients, meetings, money tracking and a feed of matched leads and jobs in one place.`,
   },
   {
     q: "Who is it for?",
     a: "It launches first for freelance, remote and contract software engineers and small dev agencies. Templates for designers, teachers and marketers follow.",
   },
   {
-    q: "How does PilotDesk find leads and jobs?",
+    q: `How does ${site.name} find leads and jobs?`,
     a: "Background automation collects new postings from approved public sources such as job board feeds and company career pages, removes duplicates, and scores each one against your skills, rate, time zone and preferences. Only good matches reach your feed.",
   },
   {
-    q: "Does PilotDesk apply to jobs or message clients for me?",
+    q: `Does ${site.name} apply to jobs or message clients for me?`,
     a: "No. It can draft a proposal or create a follow-up task, but nothing is sent on your behalf without your approval.",
   },
   {
     q: "Is my data safe?",
-    a: "Account tokens are encrypted, PilotDesk asks only for the permissions a feature needs, every account's data is isolated at the database level, and you can export or delete your data at any time.",
+    a: "Account tokens are encrypted, the app asks only for the permissions a feature needs, every account's data is isolated at the database level, and you can export or delete your data at any time.",
   },
   {
     q: "How much will it cost?",
