@@ -21,7 +21,7 @@ const csp = [
   `connect-src 'self' ${supabaseOrigin}`.trim(),
   "frame-ancestors 'none'",
   "base-uri 'self'",
-  "form-action 'self'",
+  `form-action 'self' ${supabaseOrigin} https://accounts.google.com`.trim(),
   "object-src 'none'",
   ...(isDev ? [] : ["upgrade-insecure-requests"]),
 ].join("; ");

@@ -29,6 +29,9 @@ export function SiteHeader() {
         </nav>
         <div className="flex items-center gap-3">
           <ThemeSwitcher compact />
+          <Link href="/login" className="hidden text-sm text-muted hover:text-ink sm:block">
+            Sign in
+          </Link>
           <Link href="/#waitlist" className="lift hidden h-10 items-center rounded-xl bg-accent px-4 text-sm font-semibold text-accent-ink sm:flex">
             Get early access
           </Link>

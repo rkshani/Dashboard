@@ -1,0 +1,60 @@
+import type { TemplateInput } from "./types";
+
+export const softwareEngineer: TemplateInput = {
+  id: "software-engineer",
+  version: 1,
+  name: "Software Engineer",
+  tagline: "Freelance, remote and contract developers, and small dev agencies",
+  vocabulary: {
+    client: "Client",
+    clients: "Clients",
+    project: "Project",
+    projects: "Projects",
+    opportunity: "Opportunity",
+    opportunities: "Opportunities",
+  },
+  modules: [
+    { id: "opportunities", label: "Opportunities", icon: "radar", description: "Leads and jobs matched to your stack, rate and time zone." },
+    { id: "projects", label: "Projects", icon: "layout", description: "Every project with its status, deadline, client and tasks." },
+    { id: "clients", label: "Clients", icon: "users", description: "Contacts, notes, linked projects and what each client has paid." },
+    { id: "tasks", label: "Tasks", icon: "check", description: "Everything you need to do, by due date and priority." },
+    { id: "calendar", label: "Calendar", icon: "calendar", description: "Meetings from Google Calendar plus your deadlines." },
+    { id: "finance", label: "Finance", icon: "wallet", description: "Income, expenses and the monthly picture." },
+    { id: "invoices", label: "Invoices", icon: "file", description: "Invoices from projects, paid and unpaid." },
+    { id: "automations", label: "Automations", icon: "zap", description: "Rules that follow up for you." },
+  ],
+  widgets: [
+    { type: "kpis", span: 3 },
+    { type: "opportunities", span: 2, limit: 4 },
+    { type: "today", span: 1 },
+    { type: "money", span: 1 },
+    { type: "projects", span: 1 },
+    { type: "pipeline", span: 1 },
+    { type: "automation-log", span: 3 },
+  ],
+  onboarding: {
+    skillsLabel: "Your stack",
+    skillSuggestions: ["Kotlin", "Jetpack Compose", "Flutter", "Dart", "React", "Next.js", "TypeScript", "Node.js", "Python", "Django", "Laravel", "Swift", "Firebase", "PostgreSQL", "AWS", "DevOps"],
+    workTypes: [
+      { id: "freelance", label: "Freelance projects" },
+      { id: "contract", label: "Contract roles" },
+      { id: "full-time", label: "Full-time jobs" },
+      { id: "part-time", label: "Part-time" },
+    ],
+    rateLabel: "Hourly rate",
+  },
+  opportunitySources: [
+    { id: "remote-boards", label: "Remote job boards (public feeds)" },
+    { id: "career-pages", label: "Company career pages" },
+    { id: "freelance-feeds", label: "Freelance project feeds" },
+    { id: "community", label: "Developer community hiring threads" },
+  ],
+  automations: [
+    { id: "high-match-task", when: "A new opportunity scores 85 or more", then: "Add it to your pipeline and create a review task", enabledByDefault: true },
+    { id: "contacted-followup", when: "You mark a lead as Contacted", then: "Create a follow-up task in 3 days", enabledByDefault: true },
+    { id: "deadline-warning", when: "A project deadline is 2 days away", then: "Highlight it on Today and email a reminder", enabledByDefault: true },
+    { id: "invoice-overdue", when: "An invoice passes its due date", then: "Flag the client and create a reminder task", enabledByDefault: true },
+    { id: "morning-digest", when: "Every weekday at 8:00 your time", then: "Email a digest of meetings, tasks and top matches", enabledByDefault: true },
+  ],
+  defaultTheme: "midnight",
+};

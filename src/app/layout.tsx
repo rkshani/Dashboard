@@ -3,7 +3,6 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/space-grotesk";
 import "@fontsource/jetbrains-mono/500.css";
 import "./globals.css";
-import { SiteFooter, SiteHeader } from "@/components/SiteChrome";
 import { themeInitScript } from "@/lib/themes";
 import { JsonLd } from "@/components/JsonLd";
 import { site } from "@/lib/site";
@@ -64,9 +63,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-accent focus:px-4 focus:py-2 focus:text-accent-ink">
           Skip to content
         </a>
-        <SiteHeader />
-        <main id="main">{children}</main>
-        <SiteFooter />
+        {children}
       </body>
     </html>
   );

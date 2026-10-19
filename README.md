@@ -1,56 +1,87 @@
-# Dashboard — landing page + waitlist
+# Dashboard
 
-Phase 0 of Dashboard (working name; change it in `src/lib/site.ts`): a fast, SEO/AEO/GEO-ready marketing site with a
-waitlist backed by Supabase. The dashboard app comes next in this same repo.
+A role-based all-in-one dashboard (working name; change it in `src/lib/site.ts`).
+Pick your profession and get a ready-made workspace: tasks, projects, clients, meetings,
+money and a feed of matched leads and jobs.
+
+This repo holds both the public marketing site and the signed-in app.
 
 ## Stack
 
-- Next.js 16 (App Router, Turbopack, Cache Components) + TypeScript
+- Next.js 16 (App Router, Turbopack, Cache Components, Proxy) + TypeScript
 - Tailwind CSS v4 with 4 themes (Midnight, Daylight, Forest, Dusk) via `data-theme`
-- Supabase (Postgres) for the waitlist, insert-only through row-level security
-- Self-hosted fonts (Space Grotesk, Inter, JetBrains Mono) — no external font requests
+- Supabase: Postgres, Auth (Google + email link), row-level security
+- zod for validating every form and every template
+- Self-hosted fonts (Space Grotesk, Inter, JetBrains Mono)
 
 ## Run locally
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in the Supabase values
+cp .env.example .env.local   # optional: fill in Supabase values
 npm run dev                  # http://localhost:3000
 ```
 
-Without Supabase values the form still works in "dev mode" and simply doesn't save.
+**Demo mode:** without Supabase values, `/login` shows "Try the demo". Onboarding and the
+dashboard work fully; the profile is kept in a cookie in your browser. Nothing is saved on a server.
 
-## Supabase setup
+## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. Open **SQL Editor** and run `supabase/migrations/0001_waitlist.sql`.
-3. Copy **Project URL** and **anon public key** (Settings → API) into `.env.local`.
-4. View signups in **Table Editor → waitlist** (only you can read them; the public key can only insert).
+2. **SQL Editor:** run `supabase/migrations/0001_waitlist.sql`, then `0002_profiles.sql`.
+3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
+4. **Authentication → URL Configuration:** set Site URL to your domain and add
+   `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
+5. **Authentication → Providers → Google:** enable it with a Google Cloud OAuth client
+   (authorised redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`).
+6. Email sign-in links work out of the box (Supabase's built-in mailer is rate-limited; add SMTP for production).
 
-## What's included
+## How it fits together
 
 | Area | Where |
 | --- | --- |
-| Home page (hero, features, how it works, templates, themes, security, FAQ, CTA) | `src/app/page.tsx` |
-| Profession landing pages (`/for/software-engineers`, …) | `src/app/for/[role]/page.tsx` |
-| Waitlist server action (zod validation, honeypot, rate limit) | `src/app/actions.ts` |
-| Site copy, roles and FAQ (edit text here) | `src/lib/site.ts` |
-| Themes and motion | `src/app/globals.css`, `src/lib/themes.ts` |
-| SEO: metadata, canonical, Open Graph image, sitemap, robots | `layout.tsx`, `opengraph-image.tsx`, `sitemap.ts`, `robots.ts` |
-| AEO: FAQPage, SoftwareApplication, Organization, Breadcrumb JSON-LD | `page.tsx`, `layout.tsx`, `for/[role]` |
-| GEO: `/llms.txt` summary for AI assistants | `src/app/llms.txt/route.ts` |
-| Security headers (CSP, HSTS, frame, referrer, permissions) | `next.config.ts` |
-| Privacy page (draft) | `src/app/privacy/page.tsx` |
+| Marketing site (home, `/for/[role]`, privacy) | `src/app/(marketing)/` |
+| Waitlist action (validation, honeypot, rate limit) | `src/app/actions.ts` |
+| Login page (Google, email link, demo) | `src/app/login/page.tsx` |
+| Auth + profile actions | `src/app/auth-actions.ts` |
+| OAuth / email-link callback | `src/app/auth/callback/route.ts` |
+| Session refresh + route gate | `src/proxy.ts` |
+| Data access layer (the only place that reads session/profile) | `src/lib/auth.ts` |
+| Profile schema and DB mapping | `src/lib/profile.ts` |
+| Onboarding (4-step wizard, reused in Settings) | `src/app/onboarding/`, `src/components/onboarding/ProfileWizard.tsx` |
+| **Template engine** | `src/templates/` |
+| App shell + sidebar | `src/app/app/layout.tsx`, `src/components/app/Sidebar.tsx` |
+| Home widgets + widget registry | `src/components/widgets/Widgets.tsx` |
+| Module pages (placeholders for now) | `src/app/app/[module]/page.tsx` |
+| Database migrations | `supabase/migrations/` |
 
-## Before going live
+### Templates
 
-- Set `NEXT_PUBLIC_SITE_URL` to the real domain (used in canonical URLs, sitemap, JSON-LD).
-- Replace the placeholder name and contact email in `src/lib/site.ts` once decided.
-- The rate limiter is in-memory (fine for one server). On serverless, swap in Upstash Redis.
-- Have the privacy page reviewed before collecting account data.
-- Submit the sitemap in Google Search Console and Bing Webmaster Tools.
+Each profession is one config file validated with zod at startup (`src/templates/types.ts`):
+modules and their labels, vocabulary ("Client" vs "Student"), home widgets and their sizes,
+onboarding questions, opportunity sources, and default automations.
+
+To add a profession: copy `software-engineer.ts`, change it, and register it in `src/templates/index.ts`.
+To add a widget type: add it to `WIDGET_TYPES` and to the registry in `Widgets.tsx`.
+
+### Security
+
+- Proxy refreshes the session and blocks `/app` and `/onboarding` for signed-out users;
+  the server re-checks with `supabase.auth.getUser()` in `src/lib/auth.ts`.
+- Row-level security: users can only read and write their own `profiles` row; the waitlist is insert-only.
+- All input is parsed with zod on the server; redirects only go to `/app/*`.
+- Login is rate-limited and doesn't reveal whether an email has an account.
+- CSP, HSTS, frame, referrer and permissions headers in `next.config.ts`.
+
+## Status
+
+Done: landing site, waitlist, auth, onboarding, template engine (4 templates), app shell,
+home widgets (sample data, clearly labelled), settings with live template switching.
+
+Next: real data for Tasks, Projects, Clients and Finance; Google Calendar sync; the opportunity
+collectors and matching; automations and the daily digest.
 
 ## Deploy
 
-Vercel: import the repo, add the three env vars, deploy. Any Node host works with
-`npm run build && npm start`.
+Vercel: import the repo, add the env vars from `.env.example`, deploy.
+Any Node host works with `npm run build && npm start`.
