@@ -41,6 +41,7 @@ export const designer: TemplateInput = {
     { id: "high-match-task", when: "A new gig scores 85 or more", then: "Add it to your pipeline", enabledByDefault: true },
     { id: "feedback-reminder", when: "A client hasn't replied to a review in 3 days", then: "Create a nudge task", enabledByDefault: true },
     { id: "invoice-overdue", when: "An invoice passes its due date", then: "Create a reminder task", enabledByDefault: true },
+    { id: "morning-digest", when: "Every day at your chosen time", then: "Email a digest of your day, deadlines and new matches", enabledByDefault: true },
   ],
   defaultTheme: "dusk",
 };
@@ -84,6 +85,7 @@ export const teacher: TemplateInput = {
   automations: [
     { id: "fee-reminder", when: "A student's fee is 3 days overdue", then: "Create a reminder and draft a polite message", enabledByDefault: true },
     { id: "class-prep", when: "A class starts in 1 hour", then: "Show its plan on Today", enabledByDefault: true },
+    { id: "morning-digest", when: "Every day at your chosen time", then: "Email a digest of your day, deadlines and new matches", enabledByDefault: true },
   ],
   defaultTheme: "forest",
 };
@@ -127,6 +129,7 @@ export const marketer: TemplateInput = {
   automations: [
     { id: "post-reminder", when: "A scheduled post is 1 hour away", then: "Remind you with the caption and assets", enabledByDefault: true },
     { id: "invoice-overdue", when: "An invoice passes its due date", then: "Create a reminder task", enabledByDefault: true },
+    { id: "morning-digest", when: "Every day at your chosen time", then: "Email a digest of your day, deadlines and new matches", enabledByDefault: true },
   ],
   defaultTheme: "daylight",
 };

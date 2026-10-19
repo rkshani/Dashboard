@@ -10,6 +10,11 @@ import { InvoicesView } from "@/components/app/views/InvoicesView";
 import { monthKey } from "@/lib/money";
 import { OpportunitiesView } from "@/components/app/views/OpportunitiesView";
 import { getFeed } from "@/lib/opportunities/feed";
+import { CalendarView } from "@/components/app/views/CalendarView";
+import { AutomationsView } from "@/components/app/views/AutomationsView";
+import { emailConfigured } from "@/lib/email";
+import { getCalendar, localRange } from "@/lib/calendar";
+import type { CalEvent } from "@/lib/calendar/types";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { getTemplate } from "@/templates";
@@ -53,6 +58,51 @@ async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module
     const sp = await searchParams;
     const view = sp.view === "list" ? "list" : "board";
     return <ProjectsView template={template} projects={projects} clients={clients} tasks={tasks} today={today} currency={profile.currency} view={view} />;
+  }
+
+  if (mod.id === "automations") {
+    const { repo, timezone, userId, demo } = await getRepo();
+    const [settings, log, cal] = await Promise.all([repo.getAutomationSettings(), repo.listAutomationLog(30), getCalendar(repo, userId, timezone)]);
+    return (
+      <AutomationsView
+        template={template}
+        settings={settings}
+        log={log}
+        timezone={timezone}
+        demo={demo}
+        emailReady={emailConfigured()}
+        calendarConnected={cal.state.mode === "google" || cal.state.mode === "demo"}
+      />
+    );
+  }
+
+  if (mod.id === "calendar" || mod.id === "timetable") {
+    const { repo, today, timezone, userId } = await getRepo();
+    const [cal, tasks, projects, sp] = await Promise.all([getCalendar(repo, userId, timezone), repo.listTasks(), repo.listProjects(), searchParams]);
+    let events: CalEvent[] = [];
+    let loadError = false;
+    if (cal.state.mode === "google" || cal.state.mode === "demo") {
+      const { from, to } = localRange(today, 14, timezone);
+      try {
+        events = await cal.list(from, to);
+      } catch {
+        loadError = cal.state.mode === "google";
+      }
+    }
+    return (
+      <CalendarView
+        title={mod.label}
+        state={cal.state}
+        events={events}
+        loadError={loadError}
+        tasks={tasks}
+        projects={projects}
+        today={today}
+        timezone={timezone}
+        notice={sp.connected === "1" ? "Google Calendar connected." : undefined}
+        error={typeof sp.error === "string" ? sp.error : undefined}
+      />
+    );
   }
 
   if (mod.id === "opportunities") {

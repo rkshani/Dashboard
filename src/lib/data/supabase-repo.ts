@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NotFoundError, type NewInvoice, type Repo } from "./repo";
 import type { PipelineStatus, Posting, SourceId } from "@/lib/opportunities/types";
+import { DEFAULT_SETTINGS, type AutomationSettings } from "@/lib/automations/types";
 import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 type ClientRow = { id: string; name: string; company: string | null; email: string | null; phone: string | null; status: Client["status"]; notes: string | null; created_at: string };
@@ -48,39 +49,48 @@ function check(error: { message: string; code?: string } | null) {
   }
 }
 
-/** RLS limits every query to the signed-in user; owner_id defaults to auth.uid() on insert. */
+/**
+ * Every query is filtered by owner_id and every insert sets it, on top of row-level security.
+ * With a user's session this is defense in depth; with the service-role key (scheduled jobs)
+ * it is what keeps one user's job from touching another user's data.
+ */
 export class SupabaseRepo implements Repo {
-  constructor(private db: SupabaseClient) {}
+  constructor(
+    private db: SupabaseClient,
+    private owner: string,
+  ) {
+    if (!/^[0-9a-f-]{36}$/i.test(owner)) throw new Error("Invalid owner id");
+  }
 
   async listClients() {
-    const { data, error } = await this.db.from("clients").select("id,name,company,email,phone,status,notes,created_at").order("created_at", { ascending: false }).limit(500);
+    const { data, error } = await this.db.from("clients").select("id,name,company,email,phone,status,notes,created_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(500);
     check(error);
     return (data as ClientRow[]).map(toClient);
   }
   async createClient(i: ClientInput) {
-    const { data, error } = await this.db.from("clients").insert({ name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes }).select().single<ClientRow>();
+    const { data, error } = await this.db.from("clients").insert({ owner_id: this.owner, name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes }).select().single<ClientRow>();
     check(error);
     return toClient(data!);
   }
   async updateClient(id: string, i: ClientInput) {
-    const { data, error } = await this.db.from("clients").update({ name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes }).eq("id", id).select("id");
+    const { data, error } = await this.db.from("clients").update({ name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes }).eq("owner_id", this.owner).eq("id", id).select("id");
     check(error);
     if (!data?.length) throw new NotFoundError();
   }
   async deleteClient(id: string) {
-    const { error } = await this.db.from("clients").delete().eq("id", id);
+    const { error } = await this.db.from("clients").delete().eq("owner_id", this.owner).eq("id", id);
     check(error);
   }
 
   async listProjects() {
-    const { data, error } = await this.db.from("projects").select("id,client_id,title,status,deadline,budget,description,created_at").order("created_at", { ascending: false }).limit(500);
+    const { data, error } = await this.db.from("projects").select("id,client_id,title,status,deadline,budget,description,created_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(500);
     check(error);
     return (data as ProjectRow[]).map(toProject);
   }
   async createProject(i: ProjectInput) {
     const { data, error } = await this.db
       .from("projects")
-      .insert({ title: i.title, client_id: i.clientId, status: i.status, deadline: i.deadline, budget: i.budget, description: i.description })
+      .insert({ owner_id: this.owner, title: i.title, client_id: i.clientId, status: i.status, deadline: i.deadline, budget: i.budget, description: i.description })
       .select()
       .single<ProjectRow>();
     check(error);
@@ -89,70 +99,70 @@ export class SupabaseRepo implements Repo {
   async updateProject(id: string, i: ProjectInput) {
     const { data, error } = await this.db
       .from("projects")
-      .update({ title: i.title, client_id: i.clientId, status: i.status, deadline: i.deadline, budget: i.budget, description: i.description })
+      .update({ title: i.title, client_id: i.clientId, status: i.status, deadline: i.deadline, budget: i.budget, description: i.description }).eq("owner_id", this.owner)
       .eq("id", id)
       .select("id");
     check(error);
     if (!data?.length) throw new NotFoundError();
   }
   async setProjectStatus(id: string, status: ProjectStatus) {
-    const { error } = await this.db.from("projects").update({ status }).eq("id", id);
+    const { error } = await this.db.from("projects").update({ status }).eq("owner_id", this.owner).eq("id", id);
     check(error);
   }
   async deleteProject(id: string) {
-    const { error } = await this.db.from("projects").delete().eq("id", id);
+    const { error } = await this.db.from("projects").delete().eq("owner_id", this.owner).eq("id", id);
     check(error);
   }
 
   async listTasks() {
-    const { data, error } = await this.db.from("tasks").select("id,project_id,title,due_date,priority,done,done_at,created_at").order("created_at", { ascending: false }).limit(1000);
+    const { data, error } = await this.db.from("tasks").select("id,project_id,title,due_date,priority,done,done_at,created_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(1000);
     check(error);
     return (data as TaskRow[]).map(toTask);
   }
   async createTask(i: TaskInput) {
-    const { data, error } = await this.db.from("tasks").insert({ title: i.title, project_id: i.projectId, due_date: i.dueDate, priority: i.priority }).select().single<TaskRow>();
+    const { data, error } = await this.db.from("tasks").insert({ owner_id: this.owner, title: i.title, project_id: i.projectId, due_date: i.dueDate, priority: i.priority }).select().single<TaskRow>();
     check(error);
     return toTask(data!);
   }
   async setTaskDone(id: string, done: boolean) {
-    const { error } = await this.db.from("tasks").update({ done, done_at: done ? new Date().toISOString() : null }).eq("id", id);
+    const { error } = await this.db.from("tasks").update({ done, done_at: done ? new Date().toISOString() : null }).eq("owner_id", this.owner).eq("id", id);
     check(error);
   }
   async deleteTask(id: string) {
-    const { error } = await this.db.from("tasks").delete().eq("id", id);
+    const { error } = await this.db.from("tasks").delete().eq("owner_id", this.owner).eq("id", id);
     check(error);
   }
 
   // ---------------- Finance ----------------
 
   async listTransactions() {
-    const { data, error } = await this.db.from("transactions").select("*").order("date", { ascending: false }).limit(3000);
+    const { data, error } = await this.db.from("transactions").select("*").eq("owner_id", this.owner).order("date", { ascending: false }).limit(3000);
     check(error);
     return (data as TxRow[]).map(toTx);
   }
   async createTransaction(i: TransactionInput) {
     const { data, error } = await this.db
       .from("transactions")
-      .insert({ kind: i.kind, amount: i.amount, currency: i.currency, category: i.category, date: i.date, note: i.note, client_id: i.clientId, project_id: i.projectId, invoice_id: i.invoiceId ?? null })
+      .insert({ owner_id: this.owner, kind: i.kind, amount: i.amount, currency: i.currency, category: i.category, date: i.date, note: i.note, client_id: i.clientId, project_id: i.projectId, invoice_id: i.invoiceId ?? null })
       .select()
       .single<TxRow>();
     check(error);
     return toTx(data!);
   }
   async deleteTransaction(id: string) {
-    const { error } = await this.db.from("transactions").delete().eq("id", id);
+    const { error } = await this.db.from("transactions").delete().eq("owner_id", this.owner).eq("id", id);
     check(error);
   }
 
   async listInvoices() {
-    const { data, error } = await this.db.from("invoices").select("*").order("issue_date", { ascending: false }).limit(1000);
+    const { data, error } = await this.db.from("invoices").select("*").eq("owner_id", this.owner).order("issue_date", { ascending: false }).limit(1000);
     check(error);
     return (data as InvoiceRow[]).map(toInvoice);
   }
   async createInvoice(i: NewInvoice) {
     const { data, error } = await this.db
       .from("invoices")
-      .insert({ client_id: i.clientId, project_id: i.projectId, number: i.number, issue_date: i.issueDate, due_date: i.dueDate, currency: i.currency, items: i.items, total: i.total, notes: i.notes })
+      .insert({ owner_id: this.owner, client_id: i.clientId, project_id: i.projectId, number: i.number, issue_date: i.issueDate, due_date: i.dueDate, currency: i.currency, items: i.items, total: i.total, notes: i.notes })
       .select()
       .single<InvoiceRow>();
     check(error);
@@ -161,7 +171,7 @@ export class SupabaseRepo implements Repo {
   async updateInvoice(id: string, i: Omit<NewInvoice, "number" | "currency">) {
     const { data, error } = await this.db
       .from("invoices")
-      .update({ client_id: i.clientId, project_id: i.projectId, issue_date: i.issueDate, due_date: i.dueDate, items: i.items, total: i.total, notes: i.notes })
+      .update({ client_id: i.clientId, project_id: i.projectId, issue_date: i.issueDate, due_date: i.dueDate, items: i.items, total: i.total, notes: i.notes }).eq("owner_id", this.owner)
       .eq("id", id)
       .neq("status", "paid")
       .select("id");
@@ -169,14 +179,14 @@ export class SupabaseRepo implements Repo {
     if (!data?.length) throw new NotFoundError();
   }
   async setInvoiceStatus(id: string, status: InvoiceStatus, today: string) {
-    const { data: inv, error } = await this.db.from("invoices").select("*").eq("id", id).maybeSingle<InvoiceRow>();
+    const { data: inv, error } = await this.db.from("invoices").select("*").eq("owner_id", this.owner).eq("id", id).maybeSingle<InvoiceRow>();
     check(error);
     if (!inv) throw new NotFoundError();
     if (inv.status === status) return;
-    const upd = await this.db.from("invoices").update({ status, paid_at: status === "paid" ? today : null }).eq("id", id);
+    const upd = await this.db.from("invoices").update({ status, paid_at: status === "paid" ? today : null }).eq("owner_id", this.owner).eq("id", id);
     check(upd.error);
     if (status === "paid") {
-      const existing = await this.db.from("transactions").select("id").eq("invoice_id", id).limit(1);
+      const existing = await this.db.from("transactions").select("id").eq("owner_id", this.owner).eq("invoice_id", id).limit(1);
       check(existing.error);
       if (!existing.data?.length) {
         await this.createTransaction({
@@ -192,12 +202,12 @@ export class SupabaseRepo implements Repo {
         });
       }
     } else if (inv.status === "paid") {
-      const del = await this.db.from("transactions").delete().eq("invoice_id", id);
+      const del = await this.db.from("transactions").delete().eq("owner_id", this.owner).eq("invoice_id", id);
       check(del.error);
     }
   }
   async deleteInvoice(id: string) {
-    const { error } = await this.db.from("invoices").delete().eq("id", id);
+    const { error } = await this.db.from("invoices").delete().eq("owner_id", this.owner).eq("id", id);
     check(error);
   }
 
@@ -236,14 +246,65 @@ export class SupabaseRepo implements Repo {
     );
   }
   async listOpportunityStatuses() {
-    const { data, error } = await this.db.from("user_opportunities").select("opportunity_id,status").limit(5000);
+    const { data, error } = await this.db.from("user_opportunities").select("opportunity_id,status").eq("owner_id", this.owner).limit(5000);
     check(error);
     return Object.fromEntries((data ?? []).map((r) => [r.opportunity_id as string, r.status as PipelineStatus]));
   }
   async setOpportunityStatus(id: string, status: PipelineStatus) {
-    const { data: auth } = await this.db.auth.getUser();
-    if (!auth.user) throw new NotFoundError();
-    const { error } = await this.db.from("user_opportunities").upsert({ owner_id: auth.user.id, opportunity_id: id, status, updated_at: new Date().toISOString() }, { onConflict: "owner_id,opportunity_id" });
+    const { error } = await this.db.from("user_opportunities").upsert({ owner_id: this.owner, opportunity_id: id, status, updated_at: new Date().toISOString() }, { onConflict: "owner_id,opportunity_id" });
+    check(error);
+  }
+
+  // ---------------- Automations ----------------
+
+  async getAutomationSettings(): Promise<AutomationSettings> {
+    const { data, error } = await this.db.from("automation_settings").select("rules,digest_enabled,digest_hour,last_digest_on").eq("owner_id", this.owner).maybeSingle();
+    check(error);
+    if (!data) return { ...DEFAULT_SETTINGS };
+    return {
+      rules: (data.rules as Record<string, boolean>) ?? {},
+      digestEnabled: Boolean(data.digest_enabled),
+      digestHour: Number(data.digest_hour),
+      lastDigestOn: (data.last_digest_on as string | null) ?? null,
+    };
+  }
+  async saveAutomationSettings(patch: Partial<AutomationSettings>) {
+    const cur = await this.getAutomationSettings();
+    const next = { ...cur, ...patch };
+    const { error } = await this.db.from("automation_settings").upsert(
+      { owner_id: this.owner, rules: next.rules, digest_enabled: next.digestEnabled, digest_hour: next.digestHour, last_digest_on: next.lastDigestOn, updated_at: new Date().toISOString() },
+      { onConflict: "owner_id" },
+    );
+    check(error);
+  }
+  async listAutomationLog(limit = 30) {
+    const { data, error } = await this.db.from("automation_log").select("id,rule_id,message,created_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(limit);
+    check(error);
+    return (data ?? []).map((r) => ({ id: r.id as string, ruleId: r.rule_id as string, message: r.message as string, createdAt: r.created_at as string }));
+  }
+  async logAutomation(ruleId: string, key: string, message: string) {
+    const { error } = await this.db.from("automation_log").insert({ owner_id: this.owner, rule_id: ruleId, key: key.slice(0, 200), message: message.slice(0, 300) });
+    if (error?.code === "23505") return false; // already done
+    check(error);
+    return true;
+  }
+
+  // ---------------- Integrations ----------------
+
+  async getIntegration(provider: "google") {
+    const { data, error } = await this.db.from("integrations").select("provider,refresh_token_enc,account_email,scope,connected_at").eq("owner_id", this.owner).eq("provider", provider).maybeSingle();
+    check(error);
+    if (!data) return null;
+    return { provider, refreshTokenEnc: data.refresh_token_enc as string, accountEmail: (data.account_email as string | null) ?? null, scope: data.scope as string, connectedAt: data.connected_at as string };
+  }
+  async saveIntegration(i: { provider: "google"; refreshTokenEnc: string; accountEmail: string | null; scope: string }) {
+    const { error } = await this.db
+      .from("integrations")
+      .upsert({ owner_id: this.owner, provider: i.provider, refresh_token_enc: i.refreshTokenEnc, account_email: i.accountEmail, scope: i.scope, connected_at: new Date().toISOString() }, { onConflict: "owner_id,provider" });
+    check(error);
+  }
+  async deleteIntegration(provider: "google") {
+    const { error } = await this.db.from("integrations").delete().eq("owner_id", this.owner).eq("provider", provider);
     check(error);
   }
 }

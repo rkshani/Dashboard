@@ -8,6 +8,7 @@ import { addDays } from "@/lib/dates";
 import { POSTING_ID } from "@/lib/opportunities/feed";
 import { PIPELINE_STATUSES } from "@/lib/opportunities/types";
 import { getTemplate } from "@/templates";
+import { ruleEnabled } from "@/lib/automations/engine";
 
 const input = z.object({
   id: z.string().regex(POSTING_ID),
@@ -30,8 +31,8 @@ export async function setOpportunityStatus(fd: FormData) {
 
   // Built-in automation: marking a lead "Contacted" schedules a follow-up task in 3 days.
   const template = getTemplate(profile.templateId);
-  const followUp = template.automations.find((a) => a.id === "contacted-followup")?.enabledByDefault;
-  if (parsed.data.status === "contacted" && followUp) {
+  const followUp = ruleEnabled(template, await repo.getAutomationSettings(), "contacted-followup");
+  if (parsed.data.status === "contacted" && followUp && (await repo.logAutomation("contacted-followup", posting.id, `Added a follow-up task for "${posting.title}" in 3 days`))) {
     await repo.createTask({ title: `Follow up: ${posting.title} (${posting.company})`.slice(0, 200), projectId: null, dueDate: addDays(today, 3), priority: "high" });
   }
   refresh();

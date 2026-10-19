@@ -1,42 +1,59 @@
 "use client";
 
-import { useActionState, useEffect, useRef, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useTransition, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import type { FormState } from "@/lib/data/types";
 
 const initial: FormState = { status: "idle", message: "" };
 
-/** A form bound to a server action that returns FormState; shows errors and can reset on success. */
+type Result = FormState & { okCount?: number };
+
+/**
+ * A form bound to a server action that returns FormState.
+ * - Submits through a transition (not the native form action), so React does not wipe the
+ *   fields when the server reports a validation error.
+ * - After each success the fields remount, picking up fresh values from the server
+ *   (edit forms show what was saved; "new" forms come back empty).
+ */
 export function ActionForm({
   action,
   children,
   submitLabel,
-  resetOnSuccess = false,
   onSuccess,
   className = "",
 }: {
   action: (prev: FormState, fd: FormData) => Promise<FormState>;
   children: ReactNode;
   submitLabel: string;
+  /** Kept for readability at call sites; fields always reset after a successful save. */
   resetOnSuccess?: boolean;
   onSuccess?: () => void;
   className?: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, initial);
-  const ref = useRef<HTMLFormElement>(null);
+  const [state, formAction, pending] = useActionState<Result, FormData>(async (prev, fd) => {
+    const r = await action(prev, fd);
+    return { ...r, okCount: (prev.okCount ?? 0) + (r.status === "success" ? 1 : 0) };
+  }, initial);
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
-    if (state.status === "success") {
-      if (resetOnSuccess) ref.current?.reset();
-      onSuccess?.();
-    }
+    if (state.status === "success") onSuccess?.();
     // Only react to a new result, identified by its timestamp.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.at]);
 
   return (
-    <form ref={ref} action={formAction} className={className}>
-      {children}
+    <form
+      className={className}
+      onSubmit={(e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        startTransition(() => formAction(fd));
+      }}
+    >
+      <div key={state.okCount ?? 0} className="contents">
+        {children}
+      </div>
       <div className="mt-3 flex items-center gap-3">
         <button type="submit" disabled={pending} className="lift h-11 cursor-pointer rounded-xl bg-accent px-5 text-sm font-semibold text-accent-ink disabled:opacity-60">
           {pending ? "Saving…" : submitLabel}

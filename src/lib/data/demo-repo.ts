@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { NotFoundError, type NewInvoice, type Repo } from "./repo";
 import { demoPostings } from "@/lib/opportunities/fixtures";
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
+import { DEFAULT_SETTINGS, type AutomationLogEntry, type AutomationSettings } from "@/lib/automations/types";
+import type { CalEvent, NewEvent } from "@/lib/calendar/types";
 import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 /**
@@ -10,7 +12,7 @@ import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput
  * It lives in the server process: restarting the server resets it.
  * Capped so a public demo can't be used to fill memory.
  */
-type Store = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; touched: number };
+type Store = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; touched: number };
 const LIMIT = { sessions: 500, clients: 200, projects: 200, tasks: 1000, transactions: 2000, invoices: 300 };
 
 const g = globalThis as unknown as { __dashDemo?: Map<string, Store> };
@@ -30,6 +32,9 @@ function seed(today: string, currency: string): Store {
   return {
     touched: Date.now(),
     oppStatus: {},
+    settings: { ...DEFAULT_SETTINGS },
+    log: [],
+    events: demoEvents(today),
     clients: [
       { id: c1, name: "Ayesha Khan", company: "Northwind Retail", email: "ayesha@example.com", phone: null, status: "active", notes: "Prefers WhatsApp updates on Fridays.", createdAt: now },
       { id: c2, name: "Omar Siddiqui", company: "Bright Clinic", email: "omar@example.com", phone: null, status: "active", notes: null, createdAt: now },
@@ -77,7 +82,26 @@ function getStore(sessionId: string, today: string, currency: string): Store {
   s.transactions ??= [];
   s.invoices ??= [];
   s.oppStatus ??= {};
+  s.settings ??= { ...DEFAULT_SETTINGS };
+  s.log ??= [];
+  s.events ??= demoEvents(today);
   return s;
+}
+
+/** A few example meetings around "today" so the calendar isn't empty in the demo. */
+function demoEvents(today: string): CalEvent[] {
+  const at = (days: number, hh: number, mm: number, mins: number) => {
+    const d = new Date(`${addDays(today, days)}T00:00:00Z`);
+    d.setUTCHours(hh - 5, mm); // shown in Asia/Karachi-ish local time for the demo
+    const end = new Date(d.getTime() + mins * 60_000);
+    return { start: d.toISOString(), end: end.toISOString() };
+  };
+  return [
+    { id: randomUUID(), title: "Team standup", ...at(0, 9, 30, 15), allDay: false, location: "Google Meet", url: null },
+    { id: randomUUID(), title: "Client call: POS app scope", ...at(0, 11, 0, 45), allDay: false, location: null, url: null },
+    { id: randomUUID(), title: "Design review", ...at(1, 15, 0, 60), allDay: false, location: null, url: null },
+    { id: randomUUID(), title: "Invoice day", start: addDays(today, 3), end: addDays(today, 4), allDay: true, location: null, url: null },
+  ];
 }
 
 function cap(n: number, max: number) {
@@ -218,6 +242,53 @@ export class DemoRepo implements Repo {
   async setOpportunityStatus(id: string, status: PipelineStatus) {
     if (Object.keys(this.s.oppStatus).length > 3000) throw new Error("Demo limit reached");
     this.s.oppStatus[id] = status;
+  }
+  // ---------------- Automations ----------------
+
+  async getAutomationSettings() {
+    return { ...this.s.settings, rules: { ...this.s.settings.rules } };
+  }
+  async saveAutomationSettings(patch: Partial<AutomationSettings>) {
+    this.s.settings = { ...this.s.settings, ...patch };
+  }
+  async listAutomationLog(limit = 30) {
+    return this.s.log.slice(0, limit).map(({ id, ruleId, message, createdAt }) => ({ id, ruleId, message, createdAt }));
+  }
+  async logAutomation(ruleId: string, key: string, message: string) {
+    if (this.s.log.some((l) => l.ruleId === ruleId && l.key === key)) return false;
+    this.s.log.unshift({ id: randomUUID(), ruleId, key, message, createdAt: new Date().toISOString() });
+    this.s.log = this.s.log.slice(0, 500);
+    return true;
+  }
+
+  // Google isn't available in demo mode; the calendar uses demo events instead.
+  async getIntegration() {
+    return null;
+  }
+  async saveIntegration() {
+    throw new Error("Not available in demo mode");
+  }
+  async deleteIntegration() {}
+
+  listDemoEvents(): CalEvent[] {
+    return [...this.s.events];
+  }
+  createDemoEvent(e: NewEvent, timezoneOffsetMin = 300): CalEvent {
+    cap(this.s.events.length, 300);
+    let start: string, end: string;
+    if (e.startTime) {
+      const [h, m] = e.startTime.split(":").map(Number);
+      const d = new Date(`${e.date}T00:00:00Z`);
+      d.setUTCMinutes(h * 60 + m - timezoneOffsetMin);
+      start = d.toISOString();
+      end = new Date(d.getTime() + e.durationMin * 60_000).toISOString();
+    } else {
+      start = e.date;
+      end = addDays(e.date, 1);
+    }
+    const ev: CalEvent = { id: randomUUID(), title: e.title, start, end, allDay: !e.startTime, location: null, url: null };
+    this.s.events.push(ev);
+    return ev;
   }
 }
 

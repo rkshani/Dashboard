@@ -29,7 +29,7 @@ demo session (seeded with examples; restarting the server resets them).
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0005`).
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0006`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -62,6 +62,10 @@ demo session (seeded with examples; restarting the server resets them).
 | **Opportunity engine** (sources, parsing, skills, scoring, feed) | `src/lib/opportunities/` |
 | Scheduled collector endpoint | `src/app/api/cron/collect/route.ts`, `vercel.json` |
 | Opportunities feed + pipeline | `src/components/app/views/OpportunitiesView.tsx`, `src/app/app/opportunity-actions.ts` |
+| Google Calendar (OAuth, token encryption, events) | `src/lib/google/`, `src/lib/calendar/`, `src/lib/crypto.ts`, `src/app/api/integrations/google/` |
+| Automation rules engine, digest builder, email | `src/lib/automations/`, `src/lib/email.ts` |
+| Automations page, digest preview | `src/components/app/views/AutomationsView.tsx`, `src/app/app/digest-preview/` |
+| Hourly automations + digest job | `src/app/api/cron/automations/route.ts` |
 | Unit tests (`npm test`) | `tests/` |
 | Database migrations | `supabase/migrations/` |
 
@@ -83,6 +87,9 @@ To add a widget type: add it to `WIDGET_TYPES` and to the registry in `Widgets.t
 - All input is parsed with zod on the server; redirects only go to `/app/*`.
 - Login is rate-limited and doesn't reveal whether an email has an account.
 - CSP, HSTS, frame, referrer and permissions headers in `next.config.ts`.
+- Every repository query is filtered by `owner_id` in code as well as by RLS, so service-role jobs stay scoped.
+- OAuth refresh tokens are encrypted (AES-256-GCM, bound to the user) and revoked on disconnect.
+- Cron endpoints require `CRON_SECRET` (constant-time check). Digest HTML escapes every value and only links http(s) URLs.
 
 ## Status
 
@@ -96,7 +103,10 @@ Active projects use real data.
 The **opportunity engine** is live: scheduled collectors, de-duplication, explainable matching,
 a filterable feed and a pipeline (demo mode uses an example feed from fictional companies).
 
-Next: Google Calendar sync; automation rules UI and the daily email digest; AI-drafted proposals.
+**Google Calendar sync** (connect, agenda, create events, meetings on Today and in the digest) and
+**automations** (rule toggles, run now, activity log, daily email digest with preview) are live.
+
+Next ideas: AI-drafted proposals for saved opportunities; Gmail summary; Flutter mobile app.
 
 ### Opportunity engine
 
@@ -122,6 +132,41 @@ day, hence the 6-hour schedule. No logged-in scraping of LinkedIn, Upwork or sim
 Check each source's current terms before launch, and check your Vercel plan's cron frequency limits.
 
 Run the collector by hand: `curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain.com/api/cron/collect`
+
+### Google Calendar
+
+1. Google Cloud Console: create a project, enable the **Google Calendar API**, configure the OAuth
+   consent screen, and create an **OAuth client (Web application)** with redirect URI
+   `https://your-domain.com/api/integrations/google/callback` (plus the localhost one for dev).
+2. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `TOKEN_ENCRYPTION_KEY`.
+3. Users press **Connect Google Calendar** on the Calendar page.
+
+How it's kept safe: a random `state` in an httpOnly cookie protects the OAuth round trip; only the
+`calendar.events` scope is requested (plus `openid email` to show which account is linked); the
+refresh token is encrypted with AES-256-GCM bound to the user's id before storage; access tokens
+live only in server memory; **Disconnect** revokes the token at Google and deletes it.
+`calendar.events` is a sensitive scope, so Google requires OAuth app verification before you
+open it to the public (testing mode works for up to 100 test users).
+
+### Automations and the daily digest
+
+Rules (toggle each on the Automations page; defaults come from the template):
+
+| Rule | What it does |
+| --- | --- |
+| Strong new match (85+) | Saves it to the pipeline and adds a review task |
+| Marked contacted | Adds a follow-up task in 3 days |
+| Deadline within 2 days | Adds a reminder task |
+| Invoice overdue | Adds a "chase payment" task |
+| Daily digest | Emails meetings, tasks, deadlines, top matches, unpaid invoices and what automations did |
+
+Every action is written to `automation_log` with a unique `(rule, item)` key, so rules can run every
+hour without ever repeating. `/api/cron/automations` runs hourly: it runs each user's rules and sends
+the digest when it is their chosen hour in their own time zone (once per day). It uses the service-role
+key, and every query goes through the owner-scoped repository. Email goes through Resend
+(`RESEND_API_KEY`, `DIGEST_FROM_EMAIL` on a verified domain). Users can preview the digest in the app and
+send themselves a test. Hourly cron needs a Vercel plan that allows it; otherwise call the endpoint
+from any scheduler with the `CRON_SECRET` header.
 
 ## Deploy
 

@@ -8,10 +8,13 @@ import { fmtMoney, monthKey, monthLabel, shiftMonth } from "@/lib/money";
 import { daysBetween, relativeDay } from "@/lib/dates";
 import type { FeedItem } from "@/lib/opportunities/types";
 import { timeAgo } from "@/components/app/views/OpportunitiesView";
+import type { CalEvent } from "@/lib/calendar/types";
+import type { AutomationLogEntry } from "@/lib/automations/types";
+import { eventTime } from "@/lib/calendar";
 
 type WidgetConfig = Template["widgets"][number];
 const lower = (s: string) => (/^\d/.test(s) ? s : s[0].toLowerCase() + s.slice(1));
-export type WorkData = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; feed: FeedItem[]; demoFeed: boolean; today: string };
+export type WorkData = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; feed: FeedItem[]; demoFeed: boolean; events: CalEvent[]; calendarMode: string; timezone: string; automationLog: AutomationLogEntry[]; today: string };
 type WidgetProps = { template: Template; profile: Profile; widget: WidgetConfig; data: WorkData };
 
 const spanClass = { 1: "lg:col-span-1", 2: "lg:col-span-2", 3: "lg:col-span-3" } as const;
@@ -106,31 +109,48 @@ function Opportunities({ template, profile, widget, data }: WidgetProps) {
 
 function Today({ widget, data }: WidgetProps) {
   const projectTitle = new Map(data.projects.map((p) => [p.id, p.title]));
-  const items = data.tasks
+  const tasks = data.tasks
     .filter((t) => !t.done && t.dueDate && t.dueDate <= data.today)
     .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""))
     .slice(0, 6);
+  const events = [...data.events].sort((a, b) => a.start.localeCompare(b.start)).slice(0, 5);
   return (
     <Card title={widget.title ?? "Today"} href="/app/tasks" span={widget.span} delay={120} sample={false}>
-      {items.length === 0 ? (
+      {events.length === 0 && tasks.length === 0 ? (
         <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">Nothing due today. <Link href="/app/tasks" className="text-accent hover:underline">Add a task</Link></p>
       ) : (
         <ul className="flex flex-col">
-          {items.map((t) => {
+          {events.map((e) => (
+            <li key={e.id} className="flex gap-3 rounded-lg px-1 py-2.5">
+              <span className="w-11 shrink-0 pt-0.5 font-mono text-xs text-muted">{eventTime(e, data.timezone)}</span>
+              <span className="w-0.5 shrink-0 rounded bg-accent" aria-hidden="true" />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{e.title}</span>
+                <span className="block truncate text-xs text-muted">{e.location ?? "Calendar"}</span>
+              </span>
+            </li>
+          ))}
+          {tasks.map((t) => {
             const late = t.dueDate! < data.today;
             return (
               <li key={t.id} className="flex gap-3 rounded-lg px-1 py-2.5">
+                <span className={`w-11 shrink-0 pt-0.5 font-mono text-xs ${late ? "text-warn" : "text-muted"}`}>{late ? "Late" : "Task"}</span>
                 <span className={`w-0.5 shrink-0 rounded ${late ? "bg-warn" : t.priority === "high" ? "bg-accent" : "bg-line"}`} aria-hidden="true" />
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">{t.title}</span>
                   <span className={`block truncate text-xs ${late ? "text-warn" : "text-muted"}`}>
-                    {[late ? `Overdue · ${relativeDay(t.dueDate!, data.today)}` : "Today", t.projectId ? projectTitle.get(t.projectId) : null].filter(Boolean).join(" · ")}
+                    {[late ? `Overdue · ${relativeDay(t.dueDate!, data.today)}` : "Due today", t.projectId ? projectTitle.get(t.projectId) : null].filter(Boolean).join(" · ")}
                   </span>
                 </span>
               </li>
             );
           })}
         </ul>
+      )}
+      {data.calendarMode === "disconnected" && (
+        <p className="mt-3 text-xs text-muted">
+          <Link href="/app/calendar" className="text-accent hover:underline">Connect Google Calendar</Link> to see meetings here.
+        </p>
       )}
     </Card>
   );
@@ -238,21 +258,36 @@ function Pipeline({ widget, data }: WidgetProps) {
   );
 }
 
-function AutomationLog({ template, widget }: WidgetProps) {
+function AutomationLog({ template, widget, data }: WidgetProps) {
+  const recent = data.automationLog.slice(0, 4);
   const enabled = template.automations.filter((a) => a.enabledByDefault).slice(0, 4);
   return (
     <Card title={widget.title ?? "Automations"} href="/app/automations" span={widget.span} delay={280} sample={false}>
-      <ul className="grid gap-2 md:grid-cols-2">
-        {enabled.map((a) => (
-          <li key={a.id} className="flex items-start gap-3 rounded-xl bg-surface-2 p-3 text-sm">
-            <span className="anim-pulse mt-1.5 h-2 w-2 shrink-0 rounded-full bg-good" aria-hidden="true" />
-            <span>
-              <span className="block font-medium">{a.when}</span>
-              <span className="block text-xs text-muted">{a.then}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
+      {recent.length ? (
+        <ul className="grid gap-2 md:grid-cols-2">
+          {recent.map((l) => (
+            <li key={l.id} className="flex items-start gap-3 rounded-xl bg-surface-2 p-3 text-sm">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-good" aria-hidden="true" />
+              <span>
+                <span className="block">{l.message}</span>
+                <span className="block text-xs text-muted">{timeAgo(l.createdAt)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul className="grid gap-2 md:grid-cols-2">
+          {enabled.map((a) => (
+            <li key={a.id} className="flex items-start gap-3 rounded-xl bg-surface-2 p-3 text-sm">
+              <span className="anim-pulse mt-1.5 h-2 w-2 shrink-0 rounded-full bg-good" aria-hidden="true" />
+              <span>
+                <span className="block font-medium">{a.when}</span>
+                <span className="block text-xs text-muted">{a.then}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

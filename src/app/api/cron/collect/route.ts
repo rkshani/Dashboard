@@ -1,5 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { collectAll } from "@/lib/opportunities/sources";
 
 /**
@@ -9,16 +9,8 @@ import { collectAll } from "@/lib/opportunities/sources";
  */
 export const maxDuration = 60;
 
-function authorized(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || secret.length < 16) return false;
-  const got = Buffer.from(req.headers.get("authorization") ?? "");
-  const want = Buffer.from(`Bearer ${secret}`);
-  return got.length === want.length && timingSafeEqual(got, want);
-}
-
 export async function GET(req: Request) {
-  if (!authorized(req)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!cronAuthorized(req)) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

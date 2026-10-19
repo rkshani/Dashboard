@@ -52,9 +52,9 @@ export const softwareEngineer: TemplateInput = {
   automations: [
     { id: "high-match-task", when: "A new opportunity scores 85 or more", then: "Add it to your pipeline and create a review task", enabledByDefault: true },
     { id: "contacted-followup", when: "You mark a lead as Contacted", then: "Create a follow-up task in 3 days", enabledByDefault: true },
-    { id: "deadline-warning", when: "A project deadline is 2 days away", then: "Highlight it on Today and email a reminder", enabledByDefault: true },
-    { id: "invoice-overdue", when: "An invoice passes its due date", then: "Flag the client and create a reminder task", enabledByDefault: true },
-    { id: "morning-digest", when: "Every weekday at 8:00 your time", then: "Email a digest of meetings, tasks and top matches", enabledByDefault: true },
+    { id: "deadline-warning", when: "A project deadline is 2 days away", then: "Add a reminder task and list it in your digest", enabledByDefault: true },
+    { id: "invoice-overdue", when: "An invoice passes its due date", then: "Add a task to chase the payment", enabledByDefault: true },
+    { id: "morning-digest", when: "Every day at your chosen time", then: "Email a digest of meetings, tasks, deadlines and top matches", enabledByDefault: true },
   ],
   defaultTheme: "midnight",
 };

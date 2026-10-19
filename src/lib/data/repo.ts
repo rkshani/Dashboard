@@ -1,6 +1,7 @@
 import type { Client, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
+import type { AutomationLogEntry, AutomationSettings, Integration } from "@/lib/automations/types";
 
 export type NewInvoice = InvoiceInput & { number: string; currency: string; total: number };
 
@@ -41,6 +42,16 @@ export interface Repo {
   listPostings(): Promise<Posting[]>;
   listOpportunityStatuses(): Promise<Record<string, PipelineStatus>>;
   setOpportunityStatus(id: string, status: PipelineStatus): Promise<void>;
+
+  getAutomationSettings(): Promise<AutomationSettings>;
+  saveAutomationSettings(patch: Partial<AutomationSettings>): Promise<void>;
+  listAutomationLog(limit?: number): Promise<AutomationLogEntry[]>;
+  /** Records that a rule acted on `key`. Returns false if it already had (so rules never repeat). */
+  logAutomation(ruleId: string, key: string, message: string): Promise<boolean>;
+
+  getIntegration(provider: "google"): Promise<Integration | null>;
+  saveIntegration(i: Omit<Integration, "connectedAt">): Promise<void>;
+  deleteIntegration(provider: "google"): Promise<void>;
 }
 
 export class NotFoundError extends Error {}
