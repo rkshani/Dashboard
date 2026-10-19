@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PilotDesk — landing page + waitlist
 
-## Getting Started
+Phase 0 of PilotDesk (working name): a fast, SEO/AEO/GEO-ready marketing site with a
+waitlist backed by Supabase. The dashboard app comes next in this same repo.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router, Turbopack, Cache Components) + TypeScript
+- Tailwind CSS v4 with 4 themes (Midnight, Daylight, Forest, Dusk) via `data-theme`
+- Supabase (Postgres) for the waitlist, insert-only through row-level security
+- Self-hosted fonts (Space Grotesk, Inter, JetBrains Mono) — no external font requests
+
+## Run locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # fill in the Supabase values
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Without Supabase values the form still works in "dev mode" and simply doesn't save.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Supabase setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Create a project at supabase.com.
+2. Open **SQL Editor** and run `supabase/migrations/0001_waitlist.sql`.
+3. Copy **Project URL** and **anon public key** (Settings → API) into `.env.local`.
+4. View signups in **Table Editor → waitlist** (only you can read them; the public key can only insert).
 
-## Learn More
+## What's included
 
-To learn more about Next.js, take a look at the following resources:
+| Area | Where |
+| --- | --- |
+| Home page (hero, features, how it works, templates, themes, security, FAQ, CTA) | `src/app/page.tsx` |
+| Profession landing pages (`/for/software-engineers`, …) | `src/app/for/[role]/page.tsx` |
+| Waitlist server action (zod validation, honeypot, rate limit) | `src/app/actions.ts` |
+| Site copy, roles and FAQ (edit text here) | `src/lib/site.ts` |
+| Themes and motion | `src/app/globals.css`, `src/lib/themes.ts` |
+| SEO: metadata, canonical, Open Graph image, sitemap, robots | `layout.tsx`, `opengraph-image.tsx`, `sitemap.ts`, `robots.ts` |
+| AEO: FAQPage, SoftwareApplication, Organization, Breadcrumb JSON-LD | `page.tsx`, `layout.tsx`, `for/[role]` |
+| GEO: `/llms.txt` summary for AI assistants | `src/app/llms.txt/route.ts` |
+| Security headers (CSP, HSTS, frame, referrer, permissions) | `next.config.ts` |
+| Privacy page (draft) | `src/app/privacy/page.tsx` |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Before going live
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Set `NEXT_PUBLIC_SITE_URL` to the real domain (used in canonical URLs, sitemap, JSON-LD).
+- Replace the placeholder name and contact email in `src/lib/site.ts` once decided.
+- The rate limiter is in-memory (fine for one server). On serverless, swap in Upstash Redis.
+- Have the privacy page reviewed before collecting account data.
+- Submit the sitemap in Google Search Console and Bing Webmaster Tools.
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Vercel: import the repo, add the three env vars, deploy. Any Node host works with
+`npm run build && npm start`.
