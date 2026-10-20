@@ -1,3 +1,4 @@
+import { MONEY_CADENCES, TASK_REPEATS, type MoneyCadence, type TaskRepeat } from "@/lib/recurrence";
 import { z } from "zod";
 
 export const CLIENT_STATUSES = ["lead", "active", "past"] as const;
@@ -38,6 +39,7 @@ export type Task = {
   priority: Priority;
   done: boolean;
   doneAt: string | null;
+  repeat: TaskRepeat;
   createdAt: string;
 };
 
@@ -103,8 +105,9 @@ export const taskInput = z.object({
   projectId: optUuid,
   dueDate: optDate,
   priority: z.enum(PRIORITIES).default("normal"),
+  repeat: z.enum(TASK_REPEATS).default("none"),
 });
-export type TaskInput = z.output<typeof taskInput>;
+export type TaskInput = Omit<z.output<typeof taskInput>, "repeat"> & { repeat?: TaskRepeat };
 
 export type FormState = { status: "idle" | "error" | "success"; message: string; at?: number };
 
@@ -159,6 +162,24 @@ export const transactionInput = z.object({
   projectId: optUuid,
 });
 export type TransactionInput = z.output<typeof transactionInput> & { currency: string; invoiceId?: string | null };
+
+/** A rule that adds the same income or expense on a schedule (rent, salary, subscriptions). */
+export type RecurringTxn = {
+  id: string;
+  kind: "income" | "expense";
+  amount: number;
+  currency: string;
+  category: string;
+  note: string | null;
+  clientId: string | null;
+  projectId: string | null;
+  cadence: MoneyCadence;
+  startDate: string;
+  nextDate: string;
+  createdAt: string;
+};
+export type NewRecurring = Omit<RecurringTxn, "id" | "createdAt">;
+export const moneyRepeatInput = z.enum(["none", ...MONEY_CADENCES]).default("none");
 
 export const invoiceItemSchema = z.object({
   description: z.string().trim().min(1, "Each line needs a description.").max(200),

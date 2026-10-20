@@ -4,11 +4,13 @@ import { NotFoundError, type NewInvoice, type Repo } from "./repo";
 import type { PipelineStatus, Posting, SourceId } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationSettings } from "@/lib/automations/types";
 import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
-import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 type ClientRow = { id: string; name: string; company: string | null; email: string | null; phone: string | null; status: Client["status"]; notes: string | null; created_at: string };
 type ProjectRow = { id: string; client_id: string | null; title: string; status: ProjectStatus; deadline: string | null; budget: number | string | null; description: string | null; created_at: string };
-type TaskRow = { id: string; project_id: string | null; title: string; due_date: string | null; priority: Task["priority"]; done: boolean; done_at: string | null; created_at: string };
+type TaskRow = { id: string; project_id: string | null; title: string; due_date: string | null; priority: Task["priority"]; done: boolean; done_at: string | null; repeat: Task["repeat"] | null; created_at: string };
+type RecRow = { id: string; kind: RecurringTxn["kind"]; amount: number | string; currency: string; category: string; note: string | null; client_id: string | null; project_id: string | null; cadence: RecurringTxn["cadence"]; start_date: string; next_date: string; created_at: string };
+const toRec = (r: RecRow): RecurringTxn => ({ id: r.id, kind: r.kind, amount: Number(r.amount), currency: r.currency, category: r.category, note: r.note, clientId: r.client_id, projectId: r.project_id, cadence: r.cadence, startDate: r.start_date, nextDate: r.next_date, createdAt: r.created_at });
 
 type TxRow = { id: string; kind: Transaction["kind"]; amount: number | string; currency: string; category: string; date: string; note: string | null; client_id: string | null; project_id: string | null; invoice_id: string | null; created_at: string };
 type InvoiceRow = { id: string; client_id: string | null; project_id: string | null; number: string; issue_date: string; due_date: string | null; currency: string; items: Invoice["items"]; total: number | string; status: InvoiceStatus; paid_at: string | null; notes: string | null; created_at: string };
@@ -41,7 +43,7 @@ const toProject = (r: ProjectRow): Project => ({
   description: r.description,
   createdAt: r.created_at,
 });
-const toTask = (r: TaskRow): Task => ({ id: r.id, projectId: r.project_id, title: r.title, dueDate: r.due_date, priority: r.priority, done: r.done, doneAt: r.done_at, createdAt: r.created_at });
+const toTask = (r: TaskRow): Task => ({ id: r.id, projectId: r.project_id, title: r.title, dueDate: r.due_date, priority: r.priority, done: r.done, doneAt: r.done_at, repeat: r.repeat ?? "none", createdAt: r.created_at });
 
 const POSTING_COLS = "id,source,fingerprint,kind,title,company,url,location,remote,tags,description,salary_min,salary_max,salary_currency,posted_at,attribution_name";
 type PostingRow = { id: string; source: string; fingerprint: string; kind: "job" | "lead"; title: string; company: string; url: string; location: string; remote: boolean; tags: string[]; description: string; salary_min: number | null; salary_max: number | null; salary_currency: string | null; posted_at: string; attribution_name: string };
@@ -138,19 +140,19 @@ export class SupabaseRepo implements Repo {
   }
 
   async listTasks() {
-    const { data, error } = await this.db.from("tasks").select("id,project_id,title,due_date,priority,done,done_at,created_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(1000);
+    const { data, error } = await this.db.from("tasks").select("id,project_id,title,due_date,priority,done,done_at,repeat,created_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(1000);
     check(error);
     return (data as TaskRow[]).map(toTask);
   }
   async createTask(i: TaskInput) {
-    const { data, error } = await this.db.from("tasks").insert({ owner_id: this.owner, title: i.title, project_id: i.projectId, due_date: i.dueDate, priority: i.priority }).select().single<TaskRow>();
+    const { data, error } = await this.db.from("tasks").insert({ owner_id: this.owner, title: i.title, project_id: i.projectId, due_date: i.dueDate, priority: i.priority, repeat: i.repeat ?? "none" }).select().single<TaskRow>();
     check(error);
     return toTask(data!);
   }
   async updateTask(id: string, i: TaskInput) {
     const { data, error } = await this.db
       .from("tasks")
-      .update({ title: i.title, project_id: i.projectId, due_date: i.dueDate, priority: i.priority })
+      .update({ title: i.title, project_id: i.projectId, due_date: i.dueDate, priority: i.priority, repeat: i.repeat ?? "none" })
       .eq("owner_id", this.owner)
       .eq("id", id)
       .select("id");
@@ -184,6 +186,29 @@ export class SupabaseRepo implements Repo {
   }
   async deleteTransaction(id: string) {
     const { error } = await this.db.from("transactions").delete().eq("owner_id", this.owner).eq("id", id);
+    check(error);
+  }
+
+  async listRecurring() {
+    const { data, error } = await this.db.from("recurring_transactions").select("*").eq("owner_id", this.owner).order("next_date").limit(200);
+    check(error);
+    return (data as RecRow[]).map(toRec);
+  }
+  async createRecurring(i: NewRecurring) {
+    const { data, error } = await this.db
+      .from("recurring_transactions")
+      .insert({ owner_id: this.owner, kind: i.kind, amount: i.amount, currency: i.currency, category: i.category, note: i.note, client_id: i.clientId, project_id: i.projectId, cadence: i.cadence, start_date: i.startDate, next_date: i.nextDate })
+      .select()
+      .single<RecRow>();
+    check(error);
+    return toRec(data!);
+  }
+  async setRecurringNext(id: string, nextDate: string) {
+    const { error } = await this.db.from("recurring_transactions").update({ next_date: nextDate }).eq("owner_id", this.owner).eq("id", id);
+    check(error);
+  }
+  async deleteRecurring(id: string) {
+    const { error } = await this.db.from("recurring_transactions").delete().eq("owner_id", this.owner).eq("id", id);
     check(error);
   }
 

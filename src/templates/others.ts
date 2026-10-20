@@ -77,6 +77,7 @@ export const teacher: TemplateInput = {
       { id: "school-job", label: "School / college jobs" },
     ],
     rateLabel: "Monthly fee per student",
+    rateUnit: "month",
   },
   opportunitySources: [
     { id: "teaching-jobs", label: "Teaching job boards" },
@@ -121,6 +122,7 @@ export const marketer: TemplateInput = {
       { id: "full-time", label: "Full-time roles" },
     ],
     rateLabel: "Rate per post or per month",
+    rateUnit: "month",
   },
   opportunitySources: [
     { id: "marketing-boards", label: "Marketing job boards" },

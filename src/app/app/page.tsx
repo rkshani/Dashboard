@@ -2,6 +2,9 @@ import { Suspense } from "react";
 import { WidgetGrid } from "@/components/widgets/Widgets";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
+import { getRates } from "@/lib/fx";
+import { toCurrency } from "@/lib/fx-math";
+import { materializeRecurring } from "@/lib/recurring";
 import { getFeed } from "@/lib/opportunities/feed";
 import { getCalendar, localRange } from "@/lib/calendar";
 import type { CalEvent } from "@/lib/calendar/types";
@@ -29,7 +32,11 @@ async function Home() {
   const { user, profile } = await requireProfile();
   const template = getTemplate(profile.templateId);
   const { repo, today: todayIso, userId, timezone } = await getRepo();
-  const [clients, projects, tasks, transactions, invoices, feed, automationLog] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTasks(), repo.listTransactions(), repo.listInvoices(), getFeed(repo, profile), repo.listAutomationLog(4)]);
+  await materializeRecurring(repo, todayIso);
+  const [clients, projects, tasks, rawTransactions, rawInvoices, feed, automationLog, fx] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTasks(), repo.listTransactions(), repo.listInvoices(), getFeed(repo, profile), repo.listAutomationLog(4), getRates()]);
+  // Widgets show totals in the profile currency, so convert everything up front.
+  const transactions = toCurrency(rawTransactions, "amount", profile.currency, fx);
+  const invoices = toCurrency(rawInvoices, "total", profile.currency, fx);
   const demoFeed = user.demo && feed.every((o) => o.source === "demo");
   let events: CalEvent[] = [];
   const cal = await getCalendar(repo, userId, timezone);

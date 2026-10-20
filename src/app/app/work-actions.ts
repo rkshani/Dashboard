@@ -3,7 +3,8 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { getRepo } from "@/lib/data";
-import { NotFoundError } from "@/lib/data/repo";
+import { NotFoundError, type Repo } from "@/lib/data/repo";
+import { nextTaskDate } from "@/lib/recurrence";
 import { clientInput, idSchema, PROJECT_STATUSES, projectInput, taskInput, type FormState } from "@/lib/data/types";
 import { z } from "zod";
 
@@ -97,7 +98,7 @@ export async function deleteProject(fd: FormData) {
 // ---------------- Tasks ----------------
 
 export async function addTask(_prev: FormState, fd: FormData): Promise<FormState> {
-  const parsed = taskInput.safeParse(fields(fd, ["title", "projectId", "dueDate", "priority"]));
+  const parsed = taskInput.safeParse(fields(fd, ["title", "projectId", "dueDate", "priority", "repeat"]));
   if (!parsed.success) return fail(parsed.error.issues[0].message);
   const { repo } = await getRepo();
   return run(async () => void (await repo.createTask(parsed.data)), "Task added.");
@@ -106,7 +107,7 @@ export async function addTask(_prev: FormState, fd: FormData): Promise<FormState
 export async function updateTask(_prev: FormState, fd: FormData): Promise<FormState> {
   const id = idSchema.safeParse(fd.get("id"));
   if (!id.success) return fail("Invalid id.");
-  const parsed = taskInput.safeParse(fields(fd, ["title", "projectId", "dueDate", "priority"]));
+  const parsed = taskInput.safeParse(fields(fd, ["title", "projectId", "dueDate", "priority", "repeat"]));
   if (!parsed.success) return fail(parsed.error.issues[0].message);
   const { repo } = await getRepo();
   return run(() => repo.updateTask(id.data, parsed.data), "Saved.");
@@ -115,8 +116,23 @@ export async function updateTask(_prev: FormState, fd: FormData): Promise<FormSt
 export async function toggleTask(fd: FormData) {
   const parsed = z.object({ id: idSchema, done: z.enum(["true", "false"]) }).safeParse({ id: fd.get("id"), done: fd.get("done") });
   if (!parsed.success) return;
-  const { repo } = await getRepo();
-  await run(() => repo.setTaskDone(parsed.data.id, parsed.data.done === "true"), "Updated.");
+  const { repo, today } = await getRepo();
+  const done = parsed.data.done === "true";
+  await run(async () => {
+    await repo.setTaskDone(parsed.data.id, done);
+    if (done) await scheduleNext(repo, parsed.data.id, today);
+  }, "Updated.");
+}
+
+/** Finishing a repeating task creates the next one (once, even if it is ticked, unticked and ticked again). */
+async function scheduleNext(repo: Repo, id: string, today: string) {
+  const tasks = await repo.listTasks();
+  const t = tasks.find((x) => x.id === id);
+  if (!t || t.repeat === "none") return;
+  const next = nextTaskDate(t.repeat, t.dueDate, today);
+  if (!next) return;
+  const exists = tasks.some((x) => !x.done && x.repeat === t.repeat && x.title === t.title && x.projectId === t.projectId && x.dueDate === next);
+  if (!exists) await repo.createTask({ title: t.title, projectId: t.projectId, dueDate: next, priority: t.priority, repeat: t.repeat });
 }
 
 export async function deleteTask(fd: FormData) {

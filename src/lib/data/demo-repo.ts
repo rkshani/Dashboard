@@ -6,15 +6,15 @@ import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationLogEntry, type AutomationSettings } from "@/lib/automations/types";
 import type { CalEvent, NewEvent } from "@/lib/calendar/types";
 import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
-import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 /**
  * In-memory store for demo mode, one per demo session id.
  * It lives in the server process: restarting the server resets it.
  * Capped so a public demo can't be used to fill memory.
  */
-type Store = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
-const LIMIT = { sessions: 500, clients: 200, projects: 200, tasks: 1000, transactions: 2000, invoices: 300 };
+type Store = { recurring: RecurringTxn[]; clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
+const LIMIT = { recurring: 50, sessions: 500, clients: 200, projects: 200, tasks: 1000, transactions: 2000, invoices: 300 };
 
 const g = globalThis as unknown as { __dashDemo?: Map<string, Store> };
 const stores = (g.__dashDemo ??= new Map<string, Store>());
@@ -32,6 +32,7 @@ function seed(today: string, currency: string, tzOffset: number): Store {
   const inv1 = randomUUID();
   return {
     touched: Date.now(),
+    recurring: [],
     oppStatus: {},
     business: { ...EMPTY_BUSINESS },
     settings: { ...DEFAULT_SETTINGS },
@@ -61,11 +62,11 @@ function seed(today: string, currency: string, tzOffset: number): Store {
       { id: randomUUID(), kind: "expense", amount: 20, currency, category: "Software", date: addDays(today, -1), note: "AI subscription", clientId: null, projectId: null, invoiceId: null, createdAt: now },
     ],
     tasks: [
-      { id: randomUUID(), projectId: p1, title: "Finish checkout screen", dueDate: today, priority: "high", done: false, doneAt: null, createdAt: now },
-      { id: randomUUID(), projectId: p2, title: "Send build to client for review", dueDate: addDays(today, -1), priority: "high", done: false, doneAt: null, createdAt: now },
-      { id: randomUUID(), projectId: p1, title: "Inventory sync with backend", dueDate: addDays(today, 3), priority: "normal", done: false, doneAt: null, createdAt: now },
-      { id: randomUUID(), projectId: null, title: "Update portfolio case study", dueDate: null, priority: "low", done: false, doneAt: null, createdAt: now },
-      { id: randomUUID(), projectId: p1, title: "Set up project repo", dueDate: addDays(today, -5), priority: "normal", done: true, doneAt: now, createdAt: now },
+      { id: randomUUID(), projectId: p1, title: "Finish checkout screen", dueDate: today, priority: "high", done: false, doneAt: null, repeat: "none", createdAt: now },
+      { id: randomUUID(), projectId: p2, title: "Send build to client for review", dueDate: addDays(today, -1), priority: "high", done: false, doneAt: null, repeat: "none", createdAt: now },
+      { id: randomUUID(), projectId: p1, title: "Inventory sync with backend", dueDate: addDays(today, 3), priority: "normal", done: false, doneAt: null, repeat: "none", createdAt: now },
+      { id: randomUUID(), projectId: null, title: "Update portfolio case study", dueDate: null, priority: "low", done: false, doneAt: null, repeat: "none", createdAt: now },
+      { id: randomUUID(), projectId: p1, title: "Set up project repo", dueDate: addDays(today, -5), priority: "normal", done: true, doneAt: now, repeat: "none", createdAt: now },
     ],
   };
 }
@@ -173,7 +174,7 @@ export class DemoRepo implements Repo {
   async createTask(i: TaskInput) {
     cap(this.s.tasks.length, LIMIT.tasks);
     if (i.projectId && !this.s.projects.some((p) => p.id === i.projectId)) throw new NotFoundError();
-    const t: Task = { id: randomUUID(), ...i, done: false, doneAt: null, createdAt: new Date().toISOString() };
+    const t: Task = { id: randomUUID(), ...i, repeat: i.repeat ?? "none", done: false, doneAt: null, createdAt: new Date().toISOString() };
     this.s.tasks.unshift(t);
     return t;
   }
@@ -181,7 +182,7 @@ export class DemoRepo implements Repo {
     const t = this.s.tasks.find((x) => x.id === id);
     if (!t) throw new NotFoundError();
     if (i.projectId && !this.s.projects.some((p) => p.id === i.projectId)) throw new NotFoundError();
-    Object.assign(t, { title: i.title, projectId: i.projectId, dueDate: i.dueDate, priority: i.priority });
+    Object.assign(t, { title: i.title, projectId: i.projectId, dueDate: i.dueDate, priority: i.priority, repeat: i.repeat ?? "none" });
   }
   async setTaskDone(id: string, done: boolean) {
     const t = this.s.tasks.find((x) => x.id === id);
@@ -206,6 +207,24 @@ export class DemoRepo implements Repo {
   }
   async deleteTransaction(id: string) {
     this.s.transactions = this.s.transactions.filter((x) => x.id !== id);
+  }
+
+  async listRecurring() {
+    return [...(this.s.recurring ??= [])].sort((a, b) => a.nextDate.localeCompare(b.nextDate));
+  }
+  async createRecurring(i: NewRecurring) {
+    cap((this.s.recurring ??= []).length, LIMIT.recurring);
+    const r: RecurringTxn = { id: randomUUID(), ...i, createdAt: new Date().toISOString() };
+    this.s.recurring.push(r);
+    return r;
+  }
+  async setRecurringNext(id: string, nextDate: string) {
+    const r = (this.s.recurring ??= []).find((x) => x.id === id);
+    if (!r) throw new NotFoundError();
+    r.nextDate = nextDate;
+  }
+  async deleteRecurring(id: string) {
+    this.s.recurring = (this.s.recurring ??= []).filter((x) => x.id !== id);
   }
 
   async listInvoices() {

@@ -5,6 +5,7 @@ import { MiniAction } from "@/components/app/forms";
 import { Icon } from "@/components/Sections";
 import { relativeDay } from "@/lib/dates";
 import type { Client, Invoice, Project } from "@/lib/data/types";
+import { toCurrency, type Rates } from "@/lib/fx-math";
 import { fmtMoney } from "@/lib/money";
 import type { Template } from "@/templates";
 
@@ -24,6 +25,7 @@ export function InvoicesView({
   projects,
   today,
   currency,
+  fx,
   defaultDueDate,
 }: {
   template: Template;
@@ -32,12 +34,15 @@ export function InvoicesView({
   projects: Project[];
   today: string;
   currency: string;
+  fx: Rates;
   defaultDueDate: string | null;
 }) {
   const v = template.vocabulary;
   const clientName = new Map(clients.map((c) => [c.id, c.name]));
-  const outstanding = invoices.filter((i) => i.status === "sent").reduce((s, i) => s + i.total, 0);
-  const paidTotal = invoices.filter((i) => i.status === "paid").reduce((s, i) => s + i.total, 0);
+  // Mixed currencies are converted to the profile currency for these two totals.
+  const inMine = toCurrency(invoices, "total", currency, fx);
+  const outstanding = inMine.filter((i) => i.status === "sent").reduce((s, i) => s + i.total, 0);
+  const paidTotal = inMine.filter((i) => i.status === "paid").reduce((s, i) => s + i.total, 0);
 
   return (
     <div className="mx-auto max-w-5xl">

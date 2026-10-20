@@ -4,12 +4,15 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { getRepo } from "@/lib/data";
 import { NotFoundError } from "@/lib/data/repo";
-import { businessInput, idSchema, INVOICE_STATUSES, invoiceInput, invoiceTotal, transactionInput, type FormState } from "@/lib/data/types";
+import { businessInput, idSchema, INVOICE_STATUSES, invoiceInput, invoiceTotal, moneyRepeatInput, transactionInput, type FormState } from "@/lib/data/types";
 import { requireProfile } from "@/lib/auth";
 import { emailConfigured, sendEmail } from "@/lib/email";
 import { renderInvoiceEmail } from "@/lib/invoices/email";
 import { fmtMoney } from "@/lib/money";
 import { rateLimit } from "@/lib/rate-limit";
+import type { MoneyCadence } from "@/lib/recurrence";
+import { materializeRecurring } from "@/lib/recurring";
+import { MONEY_CURRENCIES } from "@/lib/fx-math";
 
 const ok = (message: string): FormState => ({ status: "success", message, at: Date.now() });
 const fail = (message: string): FormState => ({ status: "error", message, at: Date.now() });
@@ -41,8 +44,27 @@ export async function addTransaction(_prev: FormState, fd: FormData): Promise<Fo
     projectId: get(fd, "projectId"),
   });
   if (!parsed.success) return fail(parsed.error.issues[0].message);
-  const { repo, currency } = await getRepo();
-  return run(async () => void (await repo.createTransaction({ ...parsed.data, currency })), parsed.data.kind === "income" ? "Income added." : "Expense added.");
+  const repeat = moneyRepeatInput.safeParse(get(fd, "repeat") || undefined);
+  if (!repeat.success) return fail("Pick how often it repeats.");
+  const { repo, currency: mine, today } = await getRepo();
+  const picked = get(fd, "currency");
+  if (picked && !(MONEY_CURRENCIES as readonly string[]).includes(picked)) return fail("Pick a supported currency.");
+  const currency = picked || mine;
+  const noun = parsed.data.kind === "income" ? "income" : "expense";
+  if (repeat.data === "none") return run(async () => void (await repo.createTransaction({ ...parsed.data, currency })), `${noun[0].toUpperCase()}${noun.slice(1)} added.`);
+  const { date, ...rest } = parsed.data;
+  return run(async () => {
+    await repo.createRecurring({ ...rest, currency, cadence: repeat.data as MoneyCadence, startDate: date, nextDate: date });
+    await materializeRecurring(repo, today);
+  }, date > today ? `Repeating ${noun} saved. The first one is added on ${date}.` : `Repeating ${noun} saved and added.`);
+}
+
+export async function stopRecurring(fd: FormData) {
+  const id = idSchema.safeParse(fd.get("id"));
+  if (!id.success) return;
+  const { repo } = await getRepo();
+  // Entries already added stay in the ledger; only future ones stop.
+  await run(() => repo.deleteRecurring(id.data), "Stopped. Past entries are kept.");
 }
 
 export async function deleteTransaction(fd: FormData) {
@@ -77,7 +99,10 @@ export async function saveInvoice(_prev: FormState, fd: FormData): Promise<FormS
   if (parsed.data.dueDate && parsed.data.dueDate < parsed.data.issueDate) return fail("Due date can't be before the issue date.");
 
   const total = invoiceTotal(parsed.data.items);
-  const { repo, currency } = await getRepo();
+  const { repo, currency: mine } = await getRepo();
+  const picked = get(fd, "currency");
+  if (picked && !(MONEY_CURRENCIES as readonly string[]).includes(picked)) return fail("Pick a supported currency.");
+  const currency = picked || mine;
   const id = fd.get("id");
   if (id) {
     const pid = idSchema.safeParse(id);

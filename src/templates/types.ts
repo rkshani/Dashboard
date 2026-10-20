@@ -78,6 +78,8 @@ export const templateSchema = z.object({
     skillSuggestions: z.array(z.string()),
     workTypes: z.array(z.object({ id: z.string(), label: z.string() })).min(1),
     rateLabel: z.string(),
+    /** How to read the rate when comparing it with posted pay. */
+    rateUnit: z.enum(["hour", "month", "project"]).default("hour"),
   }),
   opportunitySources: z.array(z.object({ id: z.string(), label: z.string() })),
   automations: z.array(automationSchema),

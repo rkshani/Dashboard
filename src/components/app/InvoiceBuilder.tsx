@@ -5,6 +5,7 @@ import { saveInvoice } from "@/app/app/finance-actions";
 import { ActionForm } from "./forms";
 import { inputCls, labelCls } from "./styles";
 import type { Invoice, InvoiceItem } from "@/lib/data/types";
+import { MONEY_CURRENCIES } from "@/lib/fx-math";
 import { fmtMoney } from "@/lib/money";
 
 type Line = { key: number; description: string; quantity: string; rate: string };
@@ -33,6 +34,7 @@ export function InvoiceBuilder({
 }) {
   const [lines, setLines] = useState<Line[]>(() => (invoice ? fromItems(invoice.items) : [blank()]));
   const [clientId, setClientId] = useState(invoice?.clientId ?? "");
+  const [cur, setCur] = useState(invoice?.currency ?? currency);
 
   const items = lines
     .filter((l) => l.description.trim() || l.rate)
@@ -50,11 +52,22 @@ export function InvoiceBuilder({
         if (!invoice) {
           setLines([blank()]);
           setClientId("");
+          setCur(currency);
         }
       }}
     >
       {invoice && <input type="hidden" name="id" value={invoice.id} />}
       <input type="hidden" name="items" value={JSON.stringify(items)} />
+      {!invoice && (
+        <label className="mb-3 flex items-center gap-2 text-sm">
+          <span className="text-muted">Currency</span>
+          <select name="currency" value={cur} onChange={(e) => setCur(e.target.value)} className="h-9 rounded-lg border border-line bg-bg px-2 text-sm">
+            {MONEY_CURRENCIES.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
           <span className={labelCls}>{clientLabel}</span>
@@ -93,7 +106,7 @@ export function InvoiceBuilder({
         <div className="mt-2 hidden grid-cols-[1fr_80px_110px_90px_36px] gap-2 px-1 text-[11px] text-muted sm:grid" aria-hidden="true">
           <span>Description</span>
           <span>Qty</span>
-          <span>Rate ({currency})</span>
+          <span>Rate ({cur})</span>
           <span className="text-right">Amount</span>
           <span />
         </div>
@@ -110,7 +123,7 @@ export function InvoiceBuilder({
               />
               <input aria-label={`Line ${i + 1} quantity`} value={l.quantity} onChange={(e) => update(l.key, { quantity: e.target.value })} type="number" min="0" step="any" inputMode="decimal" className={inputCls} />
               <input aria-label={`Line ${i + 1} rate`} value={l.rate} onChange={(e) => update(l.key, { rate: e.target.value })} type="number" min="0" step="any" inputMode="decimal" placeholder="0" className={inputCls} />
-              <span className="hidden items-center justify-end font-mono text-sm sm:flex">{fmtMoney((Number(l.quantity) || 0) * (Number(l.rate) || 0), currency)}</span>
+              <span className="hidden items-center justify-end font-mono text-sm sm:flex">{fmtMoney((Number(l.quantity) || 0) * (Number(l.rate) || 0), cur)}</span>
               <button
                 type="button"
                 onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [blank()]))}
@@ -131,7 +144,7 @@ export function InvoiceBuilder({
             + Add line
           </button>
           <p className="font-display text-xl font-semibold">
-            Total <span className="ml-2 font-mono">{fmtMoney(total, currency)}</span>
+            Total <span className="ml-2 font-mono">{fmtMoney(total, cur)}</span>
           </p>
         </div>
       </fieldset>

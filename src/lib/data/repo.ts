@@ -1,4 +1,4 @@
-import type { BusinessProfile, Client, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { BusinessProfile, Client, NewRecurring, RecurringTxn, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import type { AutomationLogEntry, AutomationSettings, Integration } from "@/lib/automations/types";
@@ -31,6 +31,11 @@ export interface Repo {
   listTransactions(): Promise<Transaction[]>;
   createTransaction(input: TransactionInput): Promise<Transaction>;
   deleteTransaction(id: string): Promise<void>;
+
+  listRecurring(): Promise<RecurringTxn[]>;
+  createRecurring(input: NewRecurring): Promise<RecurringTxn>;
+  setRecurringNext(id: string, nextDate: string): Promise<void>;
+  deleteRecurring(id: string): Promise<void>;
 
   listInvoices(): Promise<Invoice[]>;
   createInvoice(input: NewInvoice): Promise<Invoice>;

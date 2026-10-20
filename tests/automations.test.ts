@@ -64,9 +64,9 @@ describe("digest", () => {
       ...base,
       events: [],
       tasks: [
-        { id: "t1", projectId: null, title: "Late one", dueDate: "2026-10-18", priority: "normal", done: false, doneAt: null, createdAt: "" },
-        { id: "t2", projectId: null, title: "Today one", dueDate: "2026-10-20", priority: "high", done: false, doneAt: null, createdAt: "" },
-        { id: "t3", projectId: null, title: "Future", dueDate: "2026-10-25", priority: "normal", done: false, doneAt: null, createdAt: "" },
+        { id: "t1", projectId: null, title: "Late one", dueDate: "2026-10-18", priority: "normal", done: false, doneAt: null, repeat: "none", createdAt: "" },
+        { id: "t2", projectId: null, title: "Today one", dueDate: "2026-10-20", priority: "high", done: false, doneAt: null, repeat: "none", createdAt: "" },
+        { id: "t3", projectId: null, title: "Future", dueDate: "2026-10-25", priority: "normal", done: false, doneAt: null, repeat: "none", createdAt: "" },
       ],
       projects: [{ id: "p", clientId: null, title: "App", status: "active", deadline: "2026-10-21", budget: null, description: null, createdAt: "" }],
       invoices: [],

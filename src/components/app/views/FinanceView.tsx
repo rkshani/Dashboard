@@ -1,16 +1,20 @@
 import Link from "next/link";
-import { deleteTransaction } from "@/app/app/finance-actions";
+import { deleteTransaction, stopRecurring } from "@/app/app/finance-actions";
 import { MiniAction } from "@/components/app/forms";
 import { TransactionForm } from "@/components/app/TransactionForm";
 import { Icon } from "@/components/Sections";
 import { daysBetween, relativeDay } from "@/lib/dates";
-import type { Client, Invoice, Transaction } from "@/lib/data/types";
+import type { Client, Invoice, RecurringTxn, Transaction } from "@/lib/data/types";
+import { cadenceLabel } from "@/lib/recurrence";
+import { convert, type Rates } from "@/lib/fx-math";
 import { fmtMoney, monthKey, monthLabel, shiftMonth } from "@/lib/money";
 import type { Template } from "@/templates";
 
 export function FinanceView({
   template,
   transactions: allTransactions,
+  recurring,
+  fx,
   invoices: allInvoices,
   clients,
   today,
@@ -20,6 +24,8 @@ export function FinanceView({
 }: {
   template: Template;
   transactions: Transaction[];
+  recurring: RecurringTxn[];
+  fx: Rates;
   invoices: Invoice[];
   clients: Client[];
   today: string;
@@ -27,12 +33,21 @@ export function FinanceView({
   month: string;
   title: string;
 }) {
-  // Totals only add up amounts in the profile currency; other currencies are listed but not summed.
+  // Totals are in the profile currency. Other currencies are converted at today's rates;
+  // anything we have no rate for is listed but not added up.
+  const toMine = (amount: number, from: string) => convert(amount, from, currency, fx);
   const otherCurrency = allTransactions.filter((t) => t.currency !== currency);
+  const unconvertible = otherCurrency.filter((t) => toMine(t.amount, t.currency) === null);
+  const transactions = allTransactions.flatMap((t) => {
+    const amount = toMine(t.amount, t.currency);
+    return amount === null ? [] : [{ ...t, amount }];
+  });
+  const invoices = allInvoices.flatMap((i) => {
+    const total = toMine(i.total, i.currency);
+    return total === null ? [] : [{ ...i, total }];
+  });
   const inMonthAll = allTransactions.filter((t) => monthKey(t.date) === month);
-  const inMonth = inMonthAll.filter((t) => t.currency === currency);
-  const transactions = allTransactions.filter((t) => t.currency === currency);
-  const invoices = allInvoices.filter((i) => i.currency === currency);
+  const inMonth = transactions.filter((t) => monthKey(t.date) === month);
   const income = inMonth.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
   const expenses = inMonth.filter((t) => t.kind === "expense").reduce((s, t) => s + t.amount, 0);
   const net = income - expenses;
@@ -73,7 +88,16 @@ export function FinanceView({
           <h1 className="font-display text-3xl font-semibold tracking-tight">{title}</h1>
           <p className="text-sm text-muted">
             Totals in {currency}
-            {otherCurrency.length > 0 && <> · {otherCurrency.length} entries in other currencies are listed but not added up</>}
+            {otherCurrency.length > unconvertible.length && (
+              <>
+                {" "}· other currencies converted at {fx.live ? "today's" : "approximate"} rates (
+                <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener" className="underline hover:text-ink">
+                  Rates By Exchange Rate API
+                </a>
+                )
+              </>
+            )}
+            {unconvertible.length > 0 && <> · {unconvertible.length} entries with no exchange rate are listed but not added up</>}
           </p>
         </div>
         <nav aria-label="Month" className="flex items-center gap-1 rounded-xl border border-line bg-surface p-1">
@@ -157,6 +181,30 @@ export function FinanceView({
         <section aria-label="Add a transaction" className="anim-rise min-w-0 rounded-2xl border border-line bg-surface p-5 lg:col-span-2" style={{ animationDelay: "250ms" }}>
           <h2 className="mb-4 font-display text-lg font-semibold">Add a transaction</h2>
           <TransactionForm today={today} currency={currency} clients={clients.map((c) => ({ id: c.id, name: c.name }))} incomeLabel={incomeLabel} />
+          {recurring.length > 0 && (
+            <div className="mt-6 border-t border-line pt-4">
+              <h3 className="text-sm font-semibold">Repeating</h3>
+              <ul className="mt-2 divide-y divide-line">
+                {recurring.map((r) => (
+                  <li key={r.id} className="flex items-center gap-3 py-2 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate">{r.note || r.category}</p>
+                      <p className="text-xs text-muted">
+                        {cadenceLabel[r.cadence]} · Next: {relativeDay(r.nextDate, today)}
+                      </p>
+                    </div>
+                    <span className={`tabular-nums ${r.kind === "income" ? "text-good" : ""}`}>
+                      {r.kind === "income" ? "+" : "−"}
+                      {fmtMoney(r.amount, r.currency)}
+                    </span>
+                    <MiniAction action={stopRecurring} fields={{ id: r.id }} confirm={`Stop repeating "${r.note || r.category}"? Entries already added stay.`} className="h-9 cursor-pointer rounded-lg px-2 text-xs text-muted hover:bg-surface-2 hover:text-warn">
+                      Stop
+                    </MiniAction>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
 
         <section aria-label="Transactions" className="anim-rise min-w-0 rounded-2xl border border-line bg-surface p-5 lg:col-span-3" style={{ animationDelay: "300ms" }}>

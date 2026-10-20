@@ -29,7 +29,7 @@ demo session (seeded with examples; restarting the server resets them).
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0007`).
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0008`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -69,6 +69,10 @@ demo session (seeded with examples; restarting the server resets them).
 | Invoice details (settings), invoice email to clients | `src/app/app/settings/page.tsx`, `src/lib/invoices/email.ts`, `src/app/app/finance-actions.ts` |
 | Terms of service | `src/app/(marketing)/terms/page.tsx` |
 | Error reporting, alerts, job heartbeats, health check | `src/instrumentation.ts`, `src/lib/monitoring.ts`, `src/lib/jobs.ts`, `src/app/api/health/`, `src/app/api/client-error/` |
+| Project and client pages | `src/app/app/project/[id]/`, `src/app/app/client/[id]/` |
+| Search and Ctrl+K command palette | `src/components/app/CommandPalette.tsx`, `src/lib/search.ts`, `src/app/app/search-actions.ts` |
+| Repeating tasks and income/expenses | `src/lib/recurrence.ts`, `src/lib/recurring.ts` |
+| Exchange rates (ExchangeRate-API, no key) and pay matching | `src/lib/fx.ts`, `src/lib/fx-math.ts`, `src/lib/opportunities/match.ts` |
 | Unit tests (`npm test`) | `tests/` |
 | Database migrations | `supabase/migrations/` |
 

@@ -18,6 +18,8 @@ import { getCalendar, localRange } from "@/lib/calendar";
 import type { CalEvent } from "@/lib/calendar/types";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
+import { materializeRecurring } from "@/lib/recurring";
+import { getRates } from "@/lib/fx";
 import { getTemplate } from "@/templates";
 
 /** What each module will do once built — shown so the shell is honest about progress. */
@@ -116,20 +118,21 @@ async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module
     const kind = sp.kind === "job" || sp.kind === "lead" ? sp.kind : "all";
     const live = user.demo ? process.env.DEMO_LIVE_FEED === "1" : true;
     const isDemoFeed = user.demo && (!live || items.every((i) => i.source === "demo"));
-    return <OpportunitiesView template={template} items={items} tab={tab} min={min} kind={kind} remoteOnly={sp.remote === "1"} demo={isDemoFeed} liveConfigured={!user.demo} />;
+    return <OpportunitiesView template={template} items={items} tab={tab} min={min} kind={kind} remoteOnly={sp.remote === "1"} hideLowPay={sp.pay === "1"} hasRate={!!profile.rateMin && template.onboarding.rateUnit !== "project"} demo={isDemoFeed} liveConfigured={!user.demo} />;
   }
 
   if (mod.id === "finance" || mod.id === "invoices") {
     const { repo, today, currency } = await getRepo();
-    const [clients, projects, transactions, invoices] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTransactions(), repo.listInvoices()]);
+    if (mod.id === "finance") await materializeRecurring(repo, today);
+    const [clients, projects, transactions, invoices, recurring] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTransactions(), repo.listInvoices(), repo.listRecurring()]);
     if (mod.id === "invoices") {
       const business = await repo.getBusinessProfile();
-      return <InvoicesView template={template} invoices={invoices} clients={clients} projects={projects} today={today} currency={currency} defaultDueDate={business.defaultDueDays ? addDays(today, business.defaultDueDays) : today} />;
+      return <InvoicesView template={template} fx={await getRates()} invoices={invoices} clients={clients} projects={projects} today={today} currency={currency} defaultDueDate={business.defaultDueDays ? addDays(today, business.defaultDueDays) : today} />;
     }
     const sp = await searchParams;
     const current = monthKey(today);
     const m = typeof sp.m === "string" && /^\d{4}-\d{2}$/.test(sp.m) && sp.m <= current ? sp.m : current;
-    return <FinanceView template={template} transactions={transactions} invoices={invoices} clients={clients} today={today} currency={currency} month={m} title={mod.label} />;
+    return <FinanceView template={template} recurring={recurring} fx={await getRates()} transactions={transactions} invoices={invoices} clients={clients} today={today} currency={currency} month={m} title={mod.label} />;
   }
 
   return (

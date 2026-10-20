@@ -1,3 +1,4 @@
+import { FALLBACK_RATES, yearlyFromPosting, yearlyFromRate, type RateUnit, type Rates } from "@/lib/fx-math";
 import type { Profile } from "@/lib/profile";
 import { canonicalize, expandSkills } from "./skills";
 import type { Match, Posting } from "./types";
@@ -12,11 +13,14 @@ import type { Match, Posting } from "./types";
  *   work place fit   10
  *   work type fit    10
  *   freshness        10
+ *   pay vs your rate  +5 / −15 (only when both are known)
  */
 const LEAD_HINT = /\b(freelance|contract|contractor|project[- ]based|part[- ]time|gig|consultant|hourly)\b/i;
 const FULLTIME_HINT = /\b(full[- ]time|permanent|fte)\b/i;
 
-export function scorePosting(p: Posting, profile: Profile, nowMs = Date.now()): Match {
+export type MatchContext = { fx?: Rates; rateUnit?: RateUnit };
+
+export function scorePosting(p: Posting, profile: Profile, nowMs = Date.now(), ctx: MatchContext = {}): Match {
   const declared = canonicalize(profile.skills);
   const mine = expandSkills(declared);
   const tags = p.tags.map((t) => t.toLowerCase());
@@ -76,9 +80,26 @@ export function scorePosting(p: Posting, profile: Profile, nowMs = Date.now()): 
     }
   }
 
-  const raw = skill + title15 + place + type + fresh - regionPenalty;
+  // Pay: compare posted pay (converted to the user's currency, as yearly) with their minimum rate.
+  const pay = yearlyFromPosting(p.salaryMin, p.salaryMax, p.salaryCurrency, profile.currency, ctx.fx ?? FALLBACK_RATES);
+  const floor = yearlyFromRate(profile.rateMin, ctx.rateUnit ?? "hour");
+  let payFit: Match["payFit"] = "unknown";
+  let payAdj = 0;
+  if (pay && floor) {
+    if (pay.max >= floor) {
+      payFit = "meets";
+      payAdj = 5;
+      reasons.push("Pay fits your rate");
+    } else {
+      payFit = "below";
+      payAdj = -15;
+      cautions.push("Pays below your rate");
+    }
+  }
+
+  const raw = skill + title15 + place + type + fresh - regionPenalty + payAdj;
   // No skills in common → never rank high, whatever else lines up.
   const score = Math.max(0, Math.min(100, matchedSkills.length ? raw : Math.min(raw, 35)));
   if (!matchedSkills.length) cautions.push("No shared skills");
-  return { score, matchedSkills, reasons: reasons.slice(0, 4), cautions };
+  return { score, matchedSkills, reasons: reasons.slice(0, 4), cautions, pay, payFit };
 }

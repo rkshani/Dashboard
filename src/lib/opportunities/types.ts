@@ -35,6 +35,10 @@ export type Match = {
   reasons: string[];
   /** Things that count against it ("Not remote"), shown separately. */
   cautions: string[];
+  /** Posted pay as yearly amounts in the user's currency (approximate), when the posting lists any. */
+  pay: { min: number; max: number; currency: string } | null;
+  /** How the posted pay compares with the user's minimum rate. */
+  payFit: "meets" | "below" | "unknown";
 };
 
 export type FeedItem = Posting & Match & { status: PipelineStatus };

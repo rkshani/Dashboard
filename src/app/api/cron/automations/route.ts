@@ -8,6 +8,7 @@ import { emailConfigured, sendEmail } from "@/lib/email";
 import { rowToProfile, type ProfileRow } from "@/lib/profile";
 import { getTemplate } from "@/templates";
 import { recordJobRun } from "@/lib/jobs";
+import { materializeRecurring } from "@/lib/recurring";
 
 /**
  * Hourly job: for every onboarded user, run their automation rules, and once it is at or past their
@@ -44,6 +45,7 @@ export async function GET(req: Request) {
       const repo = new SupabaseRepo(db, row.id); // owner-scoped
       const today = todayIn(profile.timezone);
 
+      await materializeRecurring(repo, today);
       const done = await runAutomations({ repo, profile, template, today });
       stats.actions += done.length;
 

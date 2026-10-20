@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { fmtMoney } from "@/lib/money";
 import { setOpportunityStatus } from "@/app/app/opportunity-actions";
 import { MiniAction, StatusSelect } from "@/components/app/forms";
 import type { FeedItem, PipelineStatus } from "@/lib/opportunities/types";
@@ -54,6 +55,13 @@ function Card({ o, v, i }: { o: FeedItem; v: Template["vocabulary"]; i: number }
           <p className="mt-0.5 text-sm text-muted">
             {[o.company, o.location || (o.remote ? "Remote" : null), timeAgo(o.postedAt)].filter(Boolean).join(" · ")}
           </p>
+          {o.pay && (
+            <p className={`mt-1 text-sm ${o.payFit === "below" ? "text-warn" : o.payFit === "meets" ? "text-good" : "text-muted"}`}>
+              ≈ {fmtMoney(o.pay.min, o.pay.currency, { compact: true })}
+              {o.pay.max !== o.pay.min ? `–${fmtMoney(o.pay.max, o.pay.currency, { compact: true })}` : ""} a year
+              {o.salaryCurrency && o.salaryCurrency !== o.pay.currency ? <span className="text-muted"> (posted in {o.salaryCurrency})</span> : null}
+            </p>
+          )}
           {o.tags.length > 0 && (
             <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Skills">
               {o.tags.slice(0, 8).map((t) => (
@@ -109,6 +117,8 @@ export function OpportunitiesView({
   min,
   kind,
   remoteOnly,
+  hideLowPay,
+  hasRate,
   demo,
   liveConfigured,
 }: {
@@ -118,18 +128,20 @@ export function OpportunitiesView({
   min: number;
   kind: "all" | "job" | "lead";
   remoteOnly: boolean;
+  hideLowPay: boolean;
+  hasRate: boolean;
   demo: boolean;
   liveConfigured: boolean;
 }) {
   const v = template.vocabulary;
   const qs = (patch: Record<string, string | number | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { tab, min, kind, remote: remoteOnly ? "1" : undefined, ...patch };
+    const merged = { tab, min, kind, remote: remoteOnly ? "1" : undefined, pay: hideLowPay ? "1" : undefined, ...patch };
     for (const [k, val] of Object.entries(merged)) if (val !== undefined && val !== "" && !(k === "kind" && val === "all")) p.set(k, String(val));
     return `?${p.toString()}`;
   };
 
-  const feed = items.filter((o) => o.status === "new" && o.score >= min && (kind === "all" || o.kind === kind) && (!remoteOnly || o.remote));
+  const feed = items.filter((o) => o.status === "new" && o.score >= min && (kind === "all" || o.kind === kind) && (!remoteOnly || o.remote) && (!hideLowPay || o.payFit !== "below"));
   const pipeline = items.filter((o) => PIPE.some((p) => p.id === o.status));
   const dismissed = items.filter((o) => o.status === "dismissed");
   const strong = items.filter((o) => o.status === "new" && o.score >= 80).length;
@@ -186,6 +198,15 @@ export function OpportunitiesView({
             <Link href={qs({ remote: remoteOnly ? undefined : "1" })} aria-current={remoteOnly ? "true" : undefined} className={`h-9 rounded-lg border px-3 leading-9 ${remoteOnly ? "border-accent text-accent" : "border-line text-muted hover:text-ink"}`}>
               Remote only
             </Link>
+            {hasRate ? (
+              <Link href={qs({ pay: hideLowPay ? undefined : "1" })} aria-current={hideLowPay ? "true" : undefined} className={`h-9 rounded-lg border px-3 leading-9 ${hideLowPay ? "border-accent text-accent" : "border-line text-muted hover:text-ink"}`}>
+                Hide pay below my rate
+              </Link>
+            ) : (
+              <Link href="/app/settings" className="h-9 px-1 leading-9 text-xs text-muted underline hover:text-ink">
+                Add your rate to filter by pay
+              </Link>
+            )}
           </div>
           {feed.length === 0 ? (
             <div className="mt-6 rounded-2xl border border-dashed border-line p-10 text-center text-muted">

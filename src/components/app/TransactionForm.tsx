@@ -5,6 +5,8 @@ import { addTransaction } from "@/app/app/finance-actions";
 import { ActionForm } from "./forms";
 import { inputCls, labelCls } from "./styles";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/data/types";
+import { cadenceLabel, MONEY_CADENCES } from "@/lib/recurrence";
+import { MONEY_CURRENCIES } from "@/lib/fx-math";
 
 export function TransactionForm({
   today,
@@ -31,10 +33,17 @@ export function TransactionForm({
         ))}
       </fieldset>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className={labelCls}>Amount ({currency}) *</span>
-          <input name="amount" type="number" min="0.01" step="0.01" inputMode="decimal" required className={inputCls} />
-        </label>
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <label htmlFor="tx-amount" className={labelCls}>Amount *</label>
+          <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2">
+            <input id="tx-amount" name="amount" type="number" min="0.01" step="0.01" inputMode="decimal" required className={inputCls} />
+            <select name="currency" defaultValue={currency} aria-label="Currency" className={inputCls}>
+              {MONEY_CURRENCIES.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        </div>
         <label className="flex flex-col gap-1.5">
           <span className={labelCls}>Date</span>
           <input name="date" type="date" defaultValue={today} required className={inputCls} />
@@ -66,11 +75,22 @@ export function TransactionForm({
           </label>
         )}
         {kind === "income" && (
-          <label className="flex flex-col gap-1.5 sm:col-span-2">
+          <label className="flex flex-col gap-1.5">
             <span className={labelCls}>Note</span>
             <input name="note" maxLength={300} className={inputCls} />
           </label>
         )}
+        <label className={`flex flex-col gap-1.5 ${kind === "income" ? "sm:col-span-2" : ""}`}>
+          <span className={labelCls}>Repeats</span>
+          <select name="repeat" defaultValue="none" className={inputCls}>
+            <option value="none">Just once</option>
+            {MONEY_CADENCES.map((c) => (
+              <option key={c} value={c}>
+                {cadenceLabel[c]} (from this date)
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
     </ActionForm>
   );

@@ -5,6 +5,22 @@ import { Icon } from "@/components/Sections";
 import { daysBetween, relativeDay } from "@/lib/dates";
 import { PRIORITIES, type Priority, type Project, type Task } from "@/lib/data/types";
 import type { Template } from "@/templates";
+import { repeatLabel, TASK_REPEATS, type TaskRepeat } from "@/lib/recurrence";
+
+export function RepeatSelect({ value = "none" }: { value?: TaskRepeat }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className={labelCls}>Repeats</span>
+      <select name="repeat" defaultValue={value} className={inputCls}>
+        {TASK_REPEATS.map((r) => (
+          <option key={r} value={r}>
+            {repeatLabel[r]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 const prioTone: Record<Priority, string> = { high: "bg-warn/15 text-warn", normal: "bg-surface-2 text-muted", low: "bg-surface-2 text-muted" };
 const prioRank: Record<Priority, number> = { high: 0, normal: 1, low: 2 };
@@ -17,7 +33,7 @@ export function TaskRow({ t, project, today, projects, projectLabel }: { t: Task
       <div className="min-w-0 flex-1">
         <p className={`truncate text-sm ${t.done ? "text-muted line-through" : "font-medium"}`}>{t.title}</p>
         <p className="truncate text-xs text-muted">
-          {[t.dueDate ? (overdue ? `Overdue · ${relativeDay(t.dueDate, today)}` : relativeDay(t.dueDate, today)) : null, project?.title].filter(Boolean).join(" · ") || "No date"}
+          {[t.dueDate ? (overdue ? `Overdue · ${relativeDay(t.dueDate, today)}` : relativeDay(t.dueDate, today)) : null, t.repeat !== "none" ? `↻ ${repeatLabel[t.repeat].toLowerCase()}` : null, project?.title].filter(Boolean).join(" · ") || "No date"}
         </p>
       </div>
       {t.priority !== "normal" && !t.done && <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${prioTone[t.priority]}`}>{t.priority}</span>}
@@ -33,7 +49,7 @@ export function TaskRow({ t, project, today, projects, projectLabel }: { t: Task
               <span className={labelCls}>Task</span>
               <input name="title" required maxLength={200} defaultValue={t.title} className={inputCls} />
             </label>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className={labelCls}>Due</span>
                 <input name="dueDate" type="date" defaultValue={t.dueDate ?? ""} className={inputCls} />
@@ -61,6 +77,7 @@ export function TaskRow({ t, project, today, projects, projectLabel }: { t: Task
                     ))}
                 </select>
               </label>
+              <RepeatSelect value={t.repeat} />
             </div>
           </ActionForm>
         </div>
@@ -102,7 +119,7 @@ export function TasksView({ template, tasks, projects, today }: { template: Temp
         <ActionForm action={addTask} submitLabel="Add task" resetOnSuccess>
           <label className="sr-only" htmlFor="task-title">Task</label>
           <input id="task-title" name="title" required maxLength={200} placeholder="What needs doing?" className={`${inputCls} h-12 text-base`} />
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="flex flex-col gap-1.5">
               <span className={labelCls}>Due</span>
               <input name="dueDate" type="date" defaultValue={today} className={inputCls} />
@@ -130,6 +147,7 @@ export function TasksView({ template, tasks, projects, today }: { template: Temp
                   ))}
               </select>
             </label>
+            <RepeatSelect />
           </div>
         </ActionForm>
       </section>
