@@ -30,7 +30,7 @@ export async function joinWaitlist(_prev: WaitlistState, formData: FormData): Pr
 
   const h = await headers();
   const ip = (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || h.get("x-real-ip") || "unknown";
-  if (!rateLimit(`waitlist:${ip}`)) {
+  if (!(await rateLimit(`waitlist:${ip}`))) {
     return { status: "error", message: "Too many attempts. Please try again in a minute." };
   }
 

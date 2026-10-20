@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { NotFoundError, type NewInvoice, type Proposal, type Repo } from "./repo";
+import { NotFoundError, nextInvoiceNumber, type NewInvoice, type Proposal, type Repo } from "./repo";
 import { demoPostings } from "@/lib/opportunities/fixtures";
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationLogEntry, type AutomationSettings } from "@/lib/automations/types";
@@ -321,12 +321,13 @@ export class DemoRepo implements Repo {
   }
   async createInvoice(i: NewInvoice) {
     cap(this.s.invoices.length, LIMIT.invoices);
-    if (this.s.invoices.some((x) => x.number === i.number)) throw new Error("Duplicate number");
-    const inv: Invoice = { id: randomUUID(), clientId: i.clientId, projectId: i.projectId, number: i.number, issueDate: i.issueDate, dueDate: i.dueDate, currency: i.currency, items: i.items, total: i.total, status: "draft", paidAt: null, notes: i.notes, createdAt: new Date().toISOString() };
+    // Single process and no await before the insert, so this can't race.
+    const number = nextInvoiceNumber(this.s.invoices.map((x) => x.number));
+    const inv: Invoice = { id: randomUUID(), clientId: i.clientId, projectId: i.projectId, number, issueDate: i.issueDate, dueDate: i.dueDate, currency: i.currency, items: i.items, total: i.total, status: "draft", paidAt: null, notes: i.notes, createdAt: new Date().toISOString() };
     this.s.invoices.unshift(inv);
     return inv;
   }
-  async updateInvoice(id: string, i: Omit<NewInvoice, "number" | "currency">) {
+  async updateInvoice(id: string, i: Omit<NewInvoice, "currency">) {
     const inv = this.s.invoices.find((x) => x.id === id);
     if (!inv || inv.status === "paid") throw new NotFoundError();
     Object.assign(inv, { clientId: i.clientId, projectId: i.projectId, issueDate: i.issueDate, dueDate: i.dueDate, items: i.items, total: i.total, notes: i.notes });

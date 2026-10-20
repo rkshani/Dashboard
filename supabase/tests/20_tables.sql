@@ -1,0 +1,15 @@
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+insert into public.projects (id, title) values ('cccccccc-0000-4000-8000-000000000001', 'Physics');
+insert into public.clients (id, name, monthly_fee, fee_due_day, class_id) values ('dddddddd-0000-4000-8000-000000000001', 'Hamza', 8000, 5, 'cccccccc-0000-4000-8000-000000000001');
+insert into public.transactions (kind, amount, category, date, client_id) values ('income', 8000, 'Fees', '2026-10-05', 'dddddddd-0000-4000-8000-000000000001');
+insert into public.recurring_transactions (kind, amount, category, cadence, start_date, next_date) values ('expense', 30, 'Internet', 'monthly', '2026-10-01', '2026-11-01');
+insert into public.attendance (client_id, date, status, class_id) values ('dddddddd-0000-4000-8000-000000000001', '2026-10-20', 'present', 'cccccccc-0000-4000-8000-000000000001');
+insert into public.timetable_slots (class_id, weekday, start_time, end_time) values ('cccccccc-0000-4000-8000-000000000001', 2, '16:00', '17:00');
+insert into public.content_posts (title, channel, date, campaign_id) values ('Reel', 'Instagram', '2026-10-21', 'cccccccc-0000-4000-8000-000000000001');
+insert into public.tasks (title, repeat) values ('Weekly report', 'weekly');
+insert into public.notifications (kind, title, href) values ('system', 'Hi', '/app');
+insert into public.proposals (opportunity_id, body) values ('demo:demo-1', 'Hello');
+select 'all inserts ok';
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+do $$ begin insert into public.attendance (client_id, date, status) values ('dddddddd-0000-4000-8000-000000000001', '2026-10-20', 'present'); raise notice 'LEAK'; exception when others then raise notice 'cross-owner attendance blocked: %', sqlerrm; end $$;
+select 'B sees clients: ' || count(*) from public.clients;

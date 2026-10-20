@@ -61,12 +61,16 @@ create index if not exists content_owner_date_idx on public.content_posts (owner
 create or replace function public.assert_same_owner_teaching()
 returns trigger language plpgsql security invoker set search_path = '' as $$
 begin
-  if tg_table_name = 'attendance' and not exists (select 1 from public.clients c where c.id = new.client_id and c.owner_id = new.owner_id) then
-    raise exception 'student not found';
+  -- Nested IFs: PL/pgSQL doesn't short-circuit, so a column is only read on the table that has it.
+  if tg_table_name = 'attendance' then
+    if not exists (select 1 from public.clients c where c.id = new.client_id and c.owner_id = new.owner_id) then
+      raise exception 'student not found';
+    end if;
   end if;
-  if tg_table_name in ('attendance', 'timetable_slots') and new.class_id is not null
-     and not exists (select 1 from public.projects p where p.id = new.class_id and p.owner_id = new.owner_id) then
-    raise exception 'class not found';
+  if tg_table_name in ('attendance', 'timetable_slots') then
+    if new.class_id is not null and not exists (select 1 from public.projects p where p.id = new.class_id and p.owner_id = new.owner_id) then
+      raise exception 'class not found';
+    end if;
   end if;
   if tg_table_name = 'content_posts' then
     if new.campaign_id is not null and not exists (select 1 from public.projects p where p.id = new.campaign_id and p.owner_id = new.owner_id) then

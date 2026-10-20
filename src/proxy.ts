@@ -12,7 +12,8 @@ export async function proxy(request: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const isProtected = request.nextUrl.pathname.startsWith("/app") || request.nextUrl.pathname.startsWith("/onboarding");
 
-  // Demo mode (no Supabase configured): allow if a demo session cookie exists.
+  // No Supabase: demo mode needs its session cookie. Whether demo mode is allowed at all
+  // (local only) is enforced on the server in lib/auth.ts, which reads env at runtime.
   if (!url || !key) {
     if (isProtected && !request.cookies.get("dash_demo")) {
       return NextResponse.redirect(new URL("/login", request.url));

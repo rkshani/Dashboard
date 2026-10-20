@@ -10,17 +10,28 @@ const supabaseOrigin = (() => {
 
 const isDev = process.env.NODE_ENV !== "production";
 
-// Content Security Policy. 'unsafe-inline' for scripts keeps pages statically
-// rendered (theme init + JSON-LD are inline). Move to nonces once the app needs it.
+// Content Security Policy.
+// Nonces aren't possible here: Next.js says nonce-based CSP is incompatible with Partial
+// Prerendering (cacheComponents), because static shells are built before any request exists.
+// So inline <script> stays allowed (Next's own RSC payload is inline), and everything else is
+// locked down: no inline event handlers (script-src-attr), no plugins, frames, workers or
+// fetches to other sites, no <base> or form hijacking. Script files are also hash-checked
+// with Subresource Integrity (experimental.sri below).
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  "script-src-attr 'none'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  `connect-src 'self' ${supabaseOrigin}`.trim(),
+  "font-src 'self'",
+  `connect-src 'self' ${supabaseOrigin}${isDev ? " ws:" : ""}`.trim(),
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "media-src 'none'",
+  "frame-src 'none'",
+  "child-src 'none'",
   "frame-ancestors 'none'",
-  "base-uri 'self'",
+  "base-uri 'none'",
   `form-action 'self' ${supabaseOrigin} https://accounts.google.com`.trim(),
   "object-src 'none'",
   ...(isDev ? [] : ["upgrade-insecure-requests"]),
@@ -35,11 +46,15 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), browsing-topics=()" },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+  { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
 ];
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   cacheComponents: true,
+  // Adds integrity hashes to every script file, so a tampered file is refused by the browser.
+  experimental: { sri: { algorithm: "sha256" } },
   partialPrefetching: true,
   turbopack: {
     rules: {

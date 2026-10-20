@@ -43,7 +43,7 @@ export async function saveDigestTime(_prev: FormState, fd: FormData): Promise<Fo
 export async function runNow(_prev: FormState): Promise<FormState> {
   void _prev;
   const { repo, today, userId } = await getRepo();
-  if (!rateLimit(`automations:${userId}`, 6, 60_000)) return res("error", "Please wait a moment before running again.");
+  if (!(await rateLimit(`automations:${userId}`, 6, 60_000))) return res("error", "Please wait a moment before running again.");
   const { profile } = await requireProfile();
   const done = await runAutomations({ repo, profile, template: getTemplate(profile.templateId), today });
   refresh();
@@ -56,7 +56,7 @@ export async function sendTestDigest(_prev: FormState): Promise<FormState> {
   const { user, profile } = await requireProfile();
   if (demo) return res("error", "Emails can't be sent in demo mode. Use the preview instead.");
   if (!emailConfigured()) return res("error", "Email sending isn't set up on this server yet (see README).");
-  if (!rateLimit(`digest-test:${userId}`, 3, 10 * 60_000)) return res("error", "You've sent a few tests already. Try again in a few minutes.");
+  if (!(await rateLimit(`digest-test:${userId}`, 3, 10 * 60_000))) return res("error", "You've sent a few tests already. Try again in a few minutes.");
   try {
     const { digest, html, text } = await composeDigest({ repo, profile, template: getTemplate(profile.templateId), today, ownerId: userId });
     await sendEmail({ to: user.email, subject: `[Test] ${digest.subject}`, html, text });

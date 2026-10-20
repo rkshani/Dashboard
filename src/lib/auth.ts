@@ -1,4 +1,5 @@
 import "server-only";
+import { demoAllowed } from "@/lib/demo-mode";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -17,7 +18,10 @@ export const DEMO_PROFILE_COOKIE = "dash_demo_profile";
 
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   if (!supabaseConfigured()) {
+    // Read cookies first: it marks this as request-time work, so the env check below runs per
+    // request and is never baked into a page prerendered at build time.
     const jar = await cookies();
+    if (!demoAllowed()) return null;
     const id = jar.get(DEMO_COOKIE)?.value;
     // The demo cookie holds a random session id that keys the in-memory demo store.
     return id && /^[0-9a-f-]{36}$/.test(id) ? { id, email: "demo@local", demo: true } : null;

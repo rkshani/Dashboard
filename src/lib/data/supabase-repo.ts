@@ -222,15 +222,14 @@ export class SupabaseRepo implements Repo {
     return (data as InvoiceRow[]).map(toInvoice);
   }
   async createInvoice(i: NewInvoice) {
+    // The database picks the next number under a per-user lock, so numbers never clash.
     const { data, error } = await this.db
-      .from("invoices")
-      .insert({ owner_id: this.owner, client_id: i.clientId, project_id: i.projectId, number: i.number, issue_date: i.issueDate, due_date: i.dueDate, currency: i.currency, items: i.items, total: i.total, notes: i.notes })
-      .select()
+      .rpc("create_invoice", { p_owner: this.owner, p_client: i.clientId, p_project: i.projectId, p_issue: i.issueDate, p_due: i.dueDate, p_currency: i.currency, p_items: i.items, p_total: i.total, p_notes: i.notes })
       .single<InvoiceRow>();
     check(error);
     return toInvoice(data!);
   }
-  async updateInvoice(id: string, i: Omit<NewInvoice, "number" | "currency">) {
+  async updateInvoice(id: string, i: Omit<NewInvoice, "currency">) {
     const { data, error } = await this.db
       .from("invoices")
       .update({ client_id: i.clientId, project_id: i.projectId, issue_date: i.issueDate, due_date: i.dueDate, items: i.items, total: i.total, notes: i.notes }).eq("owner_id", this.owner)
@@ -241,32 +240,10 @@ export class SupabaseRepo implements Repo {
     if (!data?.length) throw new NotFoundError();
   }
   async setInvoiceStatus(id: string, status: InvoiceStatus, today: string) {
-    const { data: inv, error } = await this.db.from("invoices").select("*").eq("owner_id", this.owner).eq("id", id).maybeSingle<InvoiceRow>();
+    // One database transaction: the status and the income entry always change together.
+    const { error } = await this.db.rpc("set_invoice_status", { p_owner: this.owner, p_id: id, p_status: status, p_today: today });
+    if (error?.code === "P0002") throw new NotFoundError();
     check(error);
-    if (!inv) throw new NotFoundError();
-    if (inv.status === status) return;
-    const upd = await this.db.from("invoices").update({ status, paid_at: status === "paid" ? today : null }).eq("owner_id", this.owner).eq("id", id);
-    check(upd.error);
-    if (status === "paid") {
-      const existing = await this.db.from("transactions").select("id").eq("owner_id", this.owner).eq("invoice_id", id).limit(1);
-      check(existing.error);
-      if (!existing.data?.length) {
-        await this.createTransaction({
-          kind: "income",
-          amount: Number(inv.total),
-          currency: inv.currency,
-          category: "Project payment",
-          date: today,
-          note: `Invoice ${inv.number}`,
-          clientId: inv.client_id,
-          projectId: inv.project_id,
-          invoiceId: id,
-        });
-      }
-    } else if (inv.status === "paid") {
-      const del = await this.db.from("transactions").delete().eq("owner_id", this.owner).eq("invoice_id", id);
-      check(del.error);
-    }
   }
   async deleteInvoice(id: string) {
     const { error } = await this.db.from("invoices").delete().eq("owner_id", this.owner).eq("id", id);

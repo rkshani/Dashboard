@@ -4,7 +4,16 @@ import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
 import type { AutomationLogEntry, AutomationSettings, Integration } from "@/lib/automations/types";
 
-export type NewInvoice = InvoiceInput & { number: string; currency: string; total: number };
+export type NewInvoice = InvoiceInput & { currency: string; total: number };
+
+/** Next invoice number after the highest number already used: INV-0001, INV-0002, … */
+export function nextInvoiceNumber(existing: string[]) {
+  const max = existing.reduce((m, n) => {
+    const v = Number(/(\d+)\s*$/.exec(n)?.[1] ?? 0);
+    return v > m ? v : m;
+  }, 0);
+  return `INV-${String(max + 1).padStart(4, "0")}`;
+}
 
 /**
  * Storage interface. Pages and actions only talk to this, so the app runs the same
@@ -40,7 +49,8 @@ export interface Repo {
 
   listInvoices(): Promise<Invoice[]>;
   createInvoice(input: NewInvoice): Promise<Invoice>;
-  updateInvoice(id: string, input: Omit<NewInvoice, "number" | "currency">): Promise<void>;
+  updateInvoice(id: string, input: Omit<NewInvoice, "currency">): Promise<void>;
+  /** Assigns the next free invoice number itself. */
   /** Marking paid records the income once; moving back from paid removes that income entry. */
   setInvoiceStatus(id: string, status: InvoiceStatus, today: string): Promise<void>;
   deleteInvoice(id: string): Promise<void>;

@@ -1,0 +1,13 @@
+insert into public.opportunities (id, source, fingerprint, kind, title, company, url, posted_at, attribution_name) values ('demo:x', 'demo', 'f', 'job', 'T', 'C', 'https://x.example', now(), 'Demo');
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+insert into public.profiles (id, display_name, template_id) values ('aaaaaaaa-0000-4000-8000-000000000001', 'RK', 'teacher');
+insert into public.user_opportunities (opportunity_id, status) values ('demo:x', 'saved');
+insert into public.automation_settings default values;
+insert into public.automation_log (rule_id, key, message) values ('r', 'k', 'm');
+insert into public.integrations (provider, refresh_token_enc) values ('google', 'enc');
+insert into public.business_profiles (business_name) values ('RK Apps');
+insert into public.push_subscriptions (endpoint, p256dh, auth) values ('https://push.example/abc', repeat('a', 30), repeat('b', 16));
+select 'rest ok: ' || (select count(*) from public.user_opportunities);
+reset role; set role anon;
+insert into public.waitlist (email) values ('a@b.co');
+select 'waitlist ok';

@@ -1,7 +1,7 @@
 import "server-only";
 import type { Repo } from "@/lib/data/repo";
 import { daysBetween } from "@/lib/dates";
-import { getFeed } from "@/lib/opportunities/feed";
+import { getFeed, type FeedContext } from "@/lib/opportunities/feed";
 import type { Profile } from "@/lib/profile";
 import type { Template } from "@/templates";
 import type { AutomationSettings } from "./types";
@@ -21,7 +21,7 @@ export type RunResult = { ruleId: string; message: string }[];
  * Runs the task-creating rules once. Every action is recorded in the automation log under a
  * unique (rule, key), so running this every hour never creates duplicates.
  */
-export async function runAutomations(ctx: { repo: Repo; profile: Profile; template: Template; today: string }): Promise<RunResult> {
+export async function runAutomations(ctx: { repo: Repo; profile: Profile; template: Template; today: string; feed?: FeedContext }): Promise<RunResult> {
   const { repo, profile, template, today } = ctx;
   const settings = await repo.getAutomationSettings();
   const on = (id: string) => ruleEnabled(template, settings, id);
@@ -30,7 +30,8 @@ export async function runAutomations(ctx: { repo: Repo; profile: Profile; templa
 
   // 1. Strong new matches → save to pipeline + review task.
   if (on("high-match-task")) {
-    const feed = await getFeed(repo, profile);
+    // Only fresh postings can be "new strong matches"; older ones were already checked on earlier runs.
+    const feed = await getFeed(repo, profile, { ...ctx.feed, postedSinceMs: Date.now() - 3 * 86_400_000 });
     for (const o of feed.filter((x) => x.status === "new" && x.score >= 85).slice(0, 5)) {
       const message = `Saved "${o.title}" (${o.company}, score ${o.score}) and added a review task`;
       if (await repo.logAutomation("high-match-task", o.id, message)) {

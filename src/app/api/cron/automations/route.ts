@@ -8,6 +8,7 @@ import { emailConfigured, sendEmail } from "@/lib/email";
 import { rowToProfile, type ProfileRow } from "@/lib/profile";
 import { getTemplate } from "@/templates";
 import { recordJobRun } from "@/lib/jobs";
+import { getRates } from "@/lib/fx";
 import { materializeRecurring } from "@/lib/recurring";
 
 /**
@@ -36,6 +37,10 @@ export async function GET(req: Request) {
   const { data: profiles, error } = await db.from("profiles").select("*").not("onboarded_at", "is", null).limit(5000);
   if (error) return Response.json({ error: "Could not load profiles" }, { status: 500 });
 
+  // Load the shared posting pool and exchange rates once for every user in this run.
+  const [postings, fx] = await Promise.all([new SupabaseRepo(db, "00000000-0000-0000-0000-000000000000").listPostings(), getRates()]);
+  const feed = { postings, fx };
+
   const stats = { users: 0, actions: 0, digests: 0, failures: 0 };
   for (const row of (profiles ?? []) as ProfileRow[]) {
     stats.users++;
@@ -46,7 +51,7 @@ export async function GET(req: Request) {
       const today = todayIn(profile.timezone);
 
       await materializeRecurring(repo, today);
-      const done = await runAutomations({ repo, profile, template, today });
+      const done = await runAutomations({ repo, profile, template, today, feed });
       stats.actions += done.length;
 
       const settings = await repo.getAutomationSettings();
@@ -57,7 +62,7 @@ export async function GET(req: Request) {
         if (email) {
           // Mark first so a retry or overlapping run can't send twice.
           await repo.saveAutomationSettings({ lastDigestOn: today });
-          const { digest, html, text } = await composeDigest({ repo, profile, template, today, ownerId: row.id });
+          const { digest, html, text } = await composeDigest({ repo, profile, template, today, ownerId: row.id, feed });
           await sendEmail({ to: email, subject: digest.subject, html, text });
           stats.digests++;
         }

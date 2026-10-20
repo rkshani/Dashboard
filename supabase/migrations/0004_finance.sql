@@ -48,9 +48,11 @@ begin
   if new.project_id is not null and not exists (select 1 from public.projects p where p.id = new.project_id and p.owner_id = new.owner_id) then
     raise exception 'project not found';
   end if;
-  if tg_table_name = 'transactions' and new.invoice_id is not null
-     and not exists (select 1 from public.invoices i where i.id = new.invoice_id and i.owner_id = new.owner_id) then
-    raise exception 'invoice not found';
+  -- Nested IF: only the transactions table has invoice_id (PL/pgSQL doesn't short-circuit field lookups).
+  if tg_table_name = 'transactions' then
+    if new.invoice_id is not null and not exists (select 1 from public.invoices i where i.id = new.invoice_id and i.owner_id = new.owner_id) then
+      raise exception 'invoice not found';
+    end if;
   end if;
   return new;
 end;

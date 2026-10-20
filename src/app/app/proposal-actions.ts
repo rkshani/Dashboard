@@ -21,7 +21,7 @@ export async function generateProposal(_prev: FormState, fd: FormData): Promise<
   const { repo, userId } = await getRepo();
   const { profile } = await requireProfile();
   // AI drafts cost money, so cap them per user per day; template drafts are free.
-  if (aiConfigured() && !rateLimit(`proposal:${userId}`, 20, 86_400_000)) return fail("You've drafted 20 proposals today. Edit an existing draft, or try again tomorrow.");
+  if (aiConfigured() && !(await rateLimit(`proposal:${userId}`, 20, 86_400_000))) return fail("You've drafted 20 proposals today. Edit an existing draft, or try again tomorrow.");
   const item = (await getFeed(repo, profile)).find((o) => o.id === id.data);
   if (!item) return fail("That posting is no longer in your feed.");
   const business = await repo.getBusinessProfile();

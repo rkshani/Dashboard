@@ -50,12 +50,13 @@ create index if not exists tasks_project_idx on public.tasks (project_id);
 create or replace function public.assert_same_owner()
 returns trigger language plpgsql security invoker set search_path = '' as $$
 begin
-  if tg_table_name = 'projects' and new.client_id is not null then
-    if not exists (select 1 from public.clients c where c.id = new.client_id and c.owner_id = new.owner_id) then
+  -- Nested IFs: PL/pgSQL doesn't short-circuit, so a column is only read on the table that has it.
+  if tg_table_name = 'projects' then
+    if new.client_id is not null and not exists (select 1 from public.clients c where c.id = new.client_id and c.owner_id = new.owner_id) then
       raise exception 'client not found';
     end if;
-  elsif tg_table_name = 'tasks' and new.project_id is not null then
-    if not exists (select 1 from public.projects p where p.id = new.project_id and p.owner_id = new.owner_id) then
+  elsif tg_table_name = 'tasks' then
+    if new.project_id is not null and not exists (select 1 from public.projects p where p.id = new.project_id and p.owner_id = new.owner_id) then
       raise exception 'project not found';
     end if;
   end if;

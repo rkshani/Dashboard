@@ -1,6 +1,6 @@
 import "server-only";
 import type { Posting } from "../types";
-import { fetchJson } from "./http";
+import { fetchJson, withTimeout } from "./http";
 import { parseArbeitnow, parseGreenhouse, parseLever, parseRemoteOk, parseRemotive } from "./parsers";
 
 export type Collector = { id: string; label: string; run: () => Promise<Posting[]> };
@@ -40,19 +40,44 @@ export function collectors(): Collector[] {
   return list;
 }
 
-/** Runs every collector, isolates failures, and drops duplicates (same role on several boards). */
-export async function collectAll(): Promise<{ postings: Posting[]; report: { id: string; ok: boolean; count: number; error?: string }[] }> {
-  const results = await Promise.allSettled(collectors().map(async (c) => ({ c, postings: await c.run() })));
+/** Collectors running at the same time; the rest wait for a free slot. */
+const CONCURRENCY = 4;
+/** Hard cap per source, including parsing. */
+const PER_SOURCE_MS = 20_000;
+/** The whole run must leave time to save results inside the 60s function limit. */
+const TOTAL_BUDGET_MS = 40_000;
+
+/** Runs every collector (a few at a time, each with its own deadline), isolates failures, and drops duplicates. */
+export async function collectAll(list: Collector[] = collectors()): Promise<{ postings: Posting[]; report: { id: string; ok: boolean; count: number; error?: string }[] }> {
+  const startedAt = Date.now();
+  const results: ({ ok: true; postings: Posting[] } | { ok: false; error: string })[] = new Array(list.length);
+  let next = 0;
+  async function worker() {
+    while (next < list.length) {
+      const i = next++;
+      const left = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+      if (left < 2_000) {
+        results[i] = { ok: false, error: "Skipped: out of time this run" };
+        continue;
+      }
+      try {
+        results[i] = { ok: true, postings: await withTimeout(list[i].run(), Math.min(PER_SOURCE_MS, left), list[i].label) };
+      } catch (e) {
+        results[i] = { ok: false, error: String(e instanceof Error ? e.message : e).slice(0, 200) };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, list.length) }, worker));
+
   const report: { id: string; ok: boolean; count: number; error?: string }[] = [];
   const byFingerprint = new Map<string, Posting>();
-  const all = collectors();
   results.forEach((r, i) => {
-    if (r.status === "rejected") {
-      report.push({ id: all[i].id, ok: false, count: 0, error: String(r.reason?.message ?? r.reason).slice(0, 200) });
+    if (!r.ok) {
+      report.push({ id: list[i].id, ok: false, count: 0, error: r.error });
       return;
     }
-    report.push({ id: r.value.c.id, ok: true, count: r.value.postings.length });
-    for (const p of r.value.postings) {
+    report.push({ id: list[i].id, ok: true, count: r.postings.length });
+    for (const p of r.postings) {
       const prev = byFingerprint.get(p.fingerprint);
       // Prefer the company's own career page, then the newest listing.
       if (!prev || (p.source === "greenhouse" || p.source === "lever" ? true : prev.source !== "greenhouse" && prev.source !== "lever" && p.postedAt > prev.postedAt)) {

@@ -78,14 +78,6 @@ export async function deleteTransaction(fd: FormData) {
   else await run(() => repo.deleteTransaction(id.data), "Deleted.");
 }
 
-function nextNumber(existing: string[]) {
-  const max = existing.reduce((m, n) => {
-    const v = Number(/(\d+)\s*$/.exec(n)?.[1] ?? 0);
-    return v > m ? v : m;
-  }, 0);
-  return `INV-${String(max + 1).padStart(4, "0")}`;
-}
-
 export async function saveInvoice(_prev: FormState, fd: FormData): Promise<FormState> {
   const parsed = invoiceInput.safeParse({
     clientId: get(fd, "clientId"),
@@ -109,10 +101,7 @@ export async function saveInvoice(_prev: FormState, fd: FormData): Promise<FormS
     if (!pid.success) return fail("Invalid id.");
     return run(() => repo.updateInvoice(pid.data, { ...parsed.data, total }), "Invoice saved.");
   }
-  return run(async () => {
-    const existing = await repo.listInvoices();
-    await repo.createInvoice({ ...parsed.data, total, currency, number: nextNumber(existing.map((i) => i.number)) });
-  }, "Invoice created.");
+  return run(async () => void (await repo.createInvoice({ ...parsed.data, total, currency })), "Invoice created.");
 }
 
 export async function setInvoiceStatus(fd: FormData) {
@@ -154,7 +143,7 @@ export async function sendInvoiceToClient(_prev: FormState, fd: FormData): Promi
   const { user, profile } = await requireProfile();
   if (demo) return fail("Emails can't be sent in demo mode. Use Print / save as PDF instead.");
   if (!emailConfigured()) return fail("Email sending isn't set up on this server yet.");
-  if (!rateLimit(`invoice-email:${userId}`, 10, 60 * 60_000)) return fail("You've sent a lot of invoices this hour. Try again later.");
+  if (!(await rateLimit(`invoice-email:${userId}`, 10, 60 * 60_000))) return fail("You've sent a lot of invoices this hour. Try again later.");
 
   const [invoices, clients, business] = await Promise.all([repo.listInvoices(), repo.listClients(), repo.getBusinessProfile()]);
   const inv = invoices.find((i) => i.id === parsed.data.id);

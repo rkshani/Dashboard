@@ -1,5 +1,6 @@
 "use server";
 
+import { demoAllowed } from "@/lib/demo-mode";
 import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -39,7 +40,7 @@ function safeNext(next: unknown) {
 
 export async function signInWithEmail(_prev: FormState, formData: FormData): Promise<FormState> {
   if (!supabaseConfigured()) return { status: "error", message: "Email sign-in needs Supabase. Use demo mode for now." };
-  if (!rateLimit(`login:${await clientIp()}`, 5, 10 * 60_000)) {
+  if (!(await rateLimit(`login:${await clientIp()}`, 5, 10 * 60_000))) {
     return { status: "error", message: "Too many attempts. Try again in a few minutes." };
   }
   const parsed = z.string().trim().toLowerCase().email().max(254).safeParse(formData.get("email"));
@@ -70,6 +71,7 @@ export async function signInWithGoogle(formData: FormData) {
 
 export async function startDemo() {
   if (supabaseConfigured()) redirect("/login");
+  if (!demoAllowed()) redirect("/login?error=not-configured");
   const jar = await cookies();
   if (!/^[0-9a-f-]{36}$/.test(jar.get(DEMO_COOKIE)?.value ?? "")) jar.set(DEMO_COOKIE, randomUUID(), cookieOpts);
   redirect(jar.get(DEMO_PROFILE_COOKIE) ? "/app" : "/onboarding");

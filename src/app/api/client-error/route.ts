@@ -11,7 +11,7 @@ const body = z.object({
 
 export async function POST(req: Request) {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
-  if (!rateLimit(`client-error:${ip}`, 10, 60_000)) return new Response(null, { status: 429 });
+  if (!(await rateLimit(`client-error:${ip}`, 10, 60_000))) return new Response(null, { status: 429 });
   const raw = await req.text();
   if (raw.length > 2000) return new Response(null, { status: 413 });
   let parsed;

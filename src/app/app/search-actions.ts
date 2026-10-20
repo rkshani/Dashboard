@@ -13,7 +13,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
   const parsed = q.safeParse(query);
   if (!parsed.success || !parsed.data.trim()) return [];
   const { repo, userId } = await getRepo();
-  if (!rateLimit(`search:${userId}`, 120, 60_000)) return [];
+  if (!(await rateLimit(`search:${userId}`, 120, 60_000))) return [];
   const [clients, projects, tasks, invoices, postings, statuses, content] = await Promise.all([
     repo.listClients(),
     repo.listProjects(),

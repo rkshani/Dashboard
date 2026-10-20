@@ -24,12 +24,12 @@ npm run dev                  # http://localhost:3000
 
 **Demo mode:** without Supabase values, `/login` shows "Try the demo". Everything works:
 your profile is kept in a cookie, and clients/projects/tasks live in server memory for your
-demo session (seeded with examples; restarting the server resets them).
+demo session (seeded with examples; restarting the server resets them). Demo mode only runs in development (`npm run dev`); on a production server it is off unless `ALLOW_PUBLIC_DEMO=1` is set.
 
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0011`).
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0012`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -78,6 +78,8 @@ demo session (seeded with examples; restarting the server resets them).
 | Teachers: fees per student, attendance, weekly timetable | `src/lib/teaching/`, `src/components/app/views/FeesPanel.tsx`, `TimetableView.tsx`, `src/app/app/attendance/` |
 | Marketers: content calendar | `src/components/app/views/ContentView.tsx`, `src/app/app/content-actions.ts` |
 | Unit tests (`npm test`) | `tests/` |
+| Database tests (`npm run test:db`, needs local PostgreSQL): applies every migration and checks permissions | `supabase/tests/`, `scripts/test-db.sh` |
+| Shared rate limiter (Upstash Redis, memory fallback) | `src/lib/rate-limit.ts` |
 | Database migrations | `supabase/migrations/` |
 
 ### Templates

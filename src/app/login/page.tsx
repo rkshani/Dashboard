@@ -8,6 +8,7 @@ import { signInWithGoogle, startDemo } from "@/app/auth-actions";
 import { getCurrentUser } from "@/lib/auth";
 import { supabaseConfigured } from "@/lib/supabase/server";
 import { site } from "@/lib/site";
+import { demoAllowed } from "@/lib/demo-mode";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
 const errors: Record<string, string> = {
   callback: "That sign-in link expired or was already used. Please try again.",
   oauth: "Google sign-in didn't start. Please try again.",
-  "not-configured": "Sign-in isn't set up yet. Use demo mode for now.",
+  "not-configured": "Sign-in isn't set up on this server yet.",
 };
 
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
@@ -72,6 +73,10 @@ async function LoginBody({ searchParams }: { searchParams: PageProps<"/login">["
           </div>
           <EmailLoginForm next={next} />
         </>
+      ) : !demoAllowed() ? (
+        <div className="rounded-xl border border-warn/40 bg-surface-2 p-4 text-sm text-muted">
+          <strong className="text-ink">Sign-in isn&apos;t set up on this server yet.</strong> Please check back soon.
+        </div>
       ) : (
         <>
           <div className="rounded-xl border border-line bg-surface-2 p-4 text-sm text-muted">
