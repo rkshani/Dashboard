@@ -100,6 +100,9 @@ function Card({ o, v, i }: { o: FeedItem; v: Template["vocabulary"]; i: number }
             ) : (
               <span className="text-xs text-muted">In your pipeline: {PIPE.find((p) => p.id === o.status)?.label}</span>
             )}
+            <Link href={`/app/proposal/${encodeURIComponent(o.id)}`} className={`${btn} inline-flex items-center`}>
+              Draft {o.kind === "lead" ? "proposal" : "cover letter"}
+            </Link>
             <a href={o.attribution.url} target="_blank" rel="noopener" className="ml-auto text-xs text-muted hover:text-ink hover:underline">
               via {o.attribution.name} ↗
             </a>
@@ -243,6 +246,11 @@ export function OpportunitiesView({
                       <p className="mt-1 text-xs text-muted">
                         {o.company} · score {o.score}
                       </p>
+                      {(col.id === "saved" || col.id === "contacted") && (
+                        <Link href={`/app/proposal/${encodeURIComponent(o.id)}`} className="mt-2 inline-block text-xs text-accent hover:underline">
+                          Draft {o.kind === "lead" ? "proposal" : "cover letter"} →
+                        </Link>
+                      )}
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className="text-[11px] text-muted">via {o.attribution.name}</span>
                         <StatusSelect

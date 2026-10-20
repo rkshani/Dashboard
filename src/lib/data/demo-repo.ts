@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { NotFoundError, type NewInvoice, type Repo } from "./repo";
+import { NotFoundError, type NewInvoice, type Proposal, type Repo } from "./repo";
 import { demoPostings } from "@/lib/opportunities/fixtures";
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationLogEntry, type AutomationSettings } from "@/lib/automations/types";
@@ -14,7 +14,7 @@ import type { Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceS
  * It lives in the server process: restarting the server resets it.
  * Capped so a public demo can't be used to fill memory.
  */
-type Store = { notifications?: AppNotification[]; push?: PushSubscriptionRecord[]; recurring: RecurringTxn[]; clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
+type Store = { proposals?: Record<string, Proposal>; notifications?: AppNotification[]; push?: PushSubscriptionRecord[]; recurring: RecurringTxn[]; clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
 const LIMIT = { recurring: 50, sessions: 500, clients: 200, projects: 200, tasks: 1000, transactions: 2000, invoices: 300 };
 
 const g = globalThis as unknown as { __dashDemo?: Map<string, Store> };
@@ -306,6 +306,15 @@ export class DemoRepo implements Repo {
   }
 
   // Google isn't available in demo mode; the calendar uses demo events instead.
+  async getProposal(postingId: string) {
+    return (this.s.proposals ??= {})[postingId] ?? null;
+  }
+  async saveProposal(postingId: string, body: string, source: Proposal["source"]) {
+    const all = (this.s.proposals ??= {});
+    if (!all[postingId] && Object.keys(all).length >= 100) throw new Error("Demo limit reached");
+    all[postingId] = { postingId, body, source, updatedAt: new Date().toISOString() };
+  }
+
   async listNotifications(limit = 50) {
     return (this.s.notifications ??= []).slice(0, limit);
   }

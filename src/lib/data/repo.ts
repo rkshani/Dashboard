@@ -60,6 +60,9 @@ export interface Repo {
   getBusinessProfile(): Promise<BusinessProfile>;
   saveBusinessProfile(b: BusinessProfile): Promise<void>;
 
+  getProposal(postingId: string): Promise<Proposal | null>;
+  saveProposal(postingId: string, body: string, source: Proposal["source"]): Promise<void>;
+
   listNotifications(limit?: number): Promise<AppNotification[]>;
   countUnreadNotifications(): Promise<number>;
   addNotification(n: NewNotification): Promise<void>;
@@ -72,5 +75,7 @@ export interface Repo {
   saveIntegration(i: Omit<Integration, "connectedAt">): Promise<void>;
   deleteIntegration(provider: "google"): Promise<void>;
 }
+
+export type Proposal = { postingId: string; body: string; source: "ai" | "template" | "edited"; updatedAt: string };
 
 export class NotFoundError extends Error {}

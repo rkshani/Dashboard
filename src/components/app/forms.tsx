@@ -21,7 +21,9 @@ export function ActionForm({
   submitLabel,
   onSuccess,
   className = "",
+  pendingLabel = "Saving…",
 }: {
+  pendingLabel?: string;
   action: (prev: FormState, fd: FormData) => Promise<FormState>;
   children: ReactNode;
   submitLabel: string;
@@ -56,7 +58,7 @@ export function ActionForm({
       </div>
       <div className="mt-3 flex items-center gap-3">
         <button type="submit" disabled={pending} className="lift h-11 cursor-pointer rounded-xl bg-accent px-5 text-sm font-semibold text-accent-ink disabled:opacity-60">
-          {pending ? "Saving…" : submitLabel}
+          {pending ? pendingLabel : submitLabel}
         </button>
         <p aria-live="polite" className={`text-sm ${state.status === "error" ? "text-warn" : "text-good"}`}>
           {state.status !== "idle" ? state.message : ""}

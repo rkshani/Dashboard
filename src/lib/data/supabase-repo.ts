@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { NotFoundError, type NewInvoice, type Repo } from "./repo";
+import { NotFoundError, type NewInvoice, type Proposal, type Repo } from "./repo";
 import type { PipelineStatus, Posting, SourceId } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationSettings } from "@/lib/automations/types";
 import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
@@ -362,6 +362,16 @@ export class SupabaseRepo implements Repo {
   }
 
   // ---------------- Integrations ----------------
+
+  async getProposal(postingId: string) {
+    const { data, error } = await this.db.from("proposals").select("opportunity_id,body,source,updated_at").eq("owner_id", this.owner).eq("opportunity_id", postingId).maybeSingle();
+    check(error);
+    return data ? { postingId: data.opportunity_id as string, body: data.body as string, source: data.source as Proposal["source"], updatedAt: data.updated_at as string } : null;
+  }
+  async saveProposal(postingId: string, body: string, source: Proposal["source"]) {
+    const { error } = await this.db.from("proposals").upsert({ owner_id: this.owner, opportunity_id: postingId, body, source, updated_at: new Date().toISOString() }, { onConflict: "owner_id,opportunity_id" });
+    check(error);
+  }
 
   async listNotifications(limit = 50) {
     const { data, error } = await this.db.from("notifications").select("id,kind,title,body,href,created_at,read_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(limit);

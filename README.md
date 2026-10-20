@@ -29,7 +29,7 @@ demo session (seeded with examples; restarting the server resets them).
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0008`).
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0010`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -73,6 +73,8 @@ demo session (seeded with examples; restarting the server resets them).
 | Search and Ctrl+K command palette | `src/components/app/CommandPalette.tsx`, `src/lib/search.ts`, `src/app/app/search-actions.ts` |
 | Repeating tasks and income/expenses | `src/lib/recurrence.ts`, `src/lib/recurring.ts` |
 | Exchange rates (ExchangeRate-API, no key) and pay matching | `src/lib/fx.ts`, `src/lib/fx-math.ts`, `src/lib/opportunities/match.ts` |
+| Notifications (in-app + web push) | `src/lib/notifications/`, `src/app/app/notifications/`, `public/sw.js` |
+| Proposal and cover-letter drafts (Claude, with a template fallback) | `src/lib/proposals/`, `src/app/app/proposal/[id]/` |
 | Unit tests (`npm test`) | `tests/` |
 | Database migrations | `supabase/migrations/` |
 
