@@ -9,7 +9,7 @@ export async function GET() {
   if (!profile) return Response.json({ error: "Finish onboarding first" }, { status: 400 });
 
   const { repo, today } = await getRepo();
-  const [clients, projects, tasks, transactions, invoices, opportunityStatuses, automationSettings, automationLog, google, recurring, business] = await Promise.all([
+  const [clients, projects, tasks, transactions, invoices, opportunityStatuses, automationSettings, automationLog, google, recurring, business, slots, content, attendance] = await Promise.all([
     repo.listClients(),
     repo.listProjects(),
     repo.listTasks(),
@@ -21,6 +21,9 @@ export async function GET() {
     repo.getIntegration("google"),
     repo.listRecurring(),
     repo.getBusinessProfile(),
+    repo.listSlots(),
+    repo.listContent(),
+    repo.listAttendance("2000-01-01", "2999-12-31"),
   ]);
 
   const body = {
@@ -34,6 +37,9 @@ export async function GET() {
     recurringTransactions: recurring,
     invoices,
     businessDetails: business,
+    timetable: slots,
+    attendance,
+    contentCalendar: content,
     opportunityStatuses,
     automationSettings,
     automationLog,

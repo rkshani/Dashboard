@@ -1,4 +1,7 @@
 import Link from "next/link";
+import type { ContentPost, TimetableSlot } from "@/lib/data/types";
+import { addDaysISO } from "@/lib/recurrence";
+import { feeRows, isoWeekday } from "@/lib/teaching/fees";
 import type { ReactNode } from "react";
 import type { Profile } from "@/lib/profile";
 import type { Template } from "@/templates";
@@ -14,7 +17,7 @@ import { eventTime } from "@/lib/calendar";
 
 type WidgetConfig = Template["widgets"][number];
 const lower = (s: string) => (/^\d/.test(s) ? s : s[0].toLowerCase() + s.slice(1));
-export type WorkData = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; feed: FeedItem[]; demoFeed: boolean; events: CalEvent[]; calendarMode: string; timezone: string; automationLog: AutomationLogEntry[]; today: string };
+export type WorkData = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; feed: FeedItem[]; demoFeed: boolean; events: CalEvent[]; calendarMode: string; timezone: string; automationLog: AutomationLogEntry[]; today: string; slots: TimetableSlot[]; content: ContentPost[] };
 type WidgetProps = { template: Template; profile: Profile; widget: WidgetConfig; data: WorkData };
 
 const spanClass = { 1: "lg:col-span-1", 2: "lg:col-span-2", 3: "lg:col-span-3" } as const;
@@ -294,75 +297,109 @@ function AutomationLog({ template, widget, data }: WidgetProps) {
   );
 }
 
-function Timetable({ widget }: WidgetProps) {
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-  const slots = [
-    ["Physics 9", "", "Physics 9", "", "Test"],
-    ["", "Maths 10", "", "Maths 10", ""],
-    ["Chem 11", "Chem 11", "", "", "Chem 11"],
-  ];
-  return (
-    <Card title={widget.title ?? "This week"} href="/app/timetable" span={widget.span} delay={80}>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] border-separate border-spacing-1 text-sm">
-          <thead>
-            <tr>{days.map((d) => <th key={d} scope="col" className="pb-1 text-left text-xs font-medium text-muted">{d}</th>)}</tr>
-          </thead>
-          <tbody>
-            {slots.map((row, r) => (
-              <tr key={r}>
-                {row.map((c, i) => (
-                  <td key={i} className={`h-12 rounded-lg px-2 text-xs ${c ? "bg-surface-2 font-medium" : ""}`}>{c}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
+const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function Fees({ widget, profile }: WidgetProps) {
+function Timetable({ widget, data }: WidgetProps) {
+  const title = new Map(data.projects.map((p) => [p.id, p.title]));
+  const todayWd = isoWeekday(data.today);
+  const used = WEEK.map((_, i) => i + 1).filter((d) => d <= 5 || data.slots.some((s) => s.weekday === d));
   return (
-    <Card title={widget.title ?? "Fees this month"} href="/app/finance" span={widget.span} delay={120}>
-      <div className="space-y-3">
-        {[
-          { label: "Received", value: 22, tone: "bg-good" },
-          { label: "Due", value: 4, tone: "bg-accent" },
-          { label: "Overdue", value: 2, tone: "bg-warn" },
-        ].map((f) => (
-          <div key={f.label}>
-            <div className="flex justify-between text-sm"><span>{f.label}</span><span className="font-mono text-xs text-muted">{f.value} students</span></div>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2">
-              <div className={`anim-fill h-1.5 rounded-full ${f.tone}`} style={{ width: `${(f.value / 28) * 100}%` }} />
+    <Card title={widget.title ?? "This week"} href="/app/timetable" span={widget.span} delay={80} sample={false}>
+      {data.slots.length === 0 ? (
+        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">
+          No classes on your timetable yet.{" "}
+          <Link href="/app/timetable" className="text-accent underline">
+            Add one
+          </Link>
+        </p>
+      ) : (
+        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${used.length}, minmax(0, 1fr))` }}>
+          {used.map((d) => (
+            <div key={d} className="min-w-0">
+              <p className={`mb-1 text-xs font-medium ${d === todayWd ? "text-accent" : "text-muted"}`}>{WEEK[d - 1]}</p>
+              <ul className="flex flex-col gap-1">
+                {data.slots
+                  .filter((s) => s.weekday === d)
+                  .map((s) => (
+                    <li key={s.id} className={`rounded-lg px-1.5 py-1 text-[11px] leading-tight ${d === todayWd ? "bg-accent/15" : "bg-surface-2"}`}>
+                      <span className="block font-mono text-muted">{s.start}</span>
+                      <span className="block truncate font-medium">{title.get(s.classId) ?? "Class"}</span>
+                    </li>
+                  ))}
+              </ul>
             </div>
-          </div>
-        ))}
-        <p className="text-xs text-muted">Amounts in {profile.currency}</p>
-      </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
 
-function ContentCalendar({ widget }: WidgetProps) {
-  const posts = [
-    { day: "Mon", title: "Product teaser reel", ch: "Instagram" },
-    { day: "Wed", title: "How-to carousel", ch: "LinkedIn" },
-    { day: "Thu", title: "Client campaign launch", ch: "Meta Ads" },
-    { day: "Sat", title: "Behind the scenes", ch: "TikTok" },
+function Fees({ widget, profile, data }: WidgetProps) {
+  const rows = feeRows(data.clients, data.transactions, data.today.slice(0, 7), data.today);
+  const groups = [
+    { label: "Paid", n: rows.filter((r) => r.status === "paid").length, tone: "bg-good" },
+    { label: "Due or not yet due", n: rows.filter((r) => r.status === "due" || r.status === "upcoming" || r.status === "partial").length, tone: "bg-accent" },
+    { label: "Overdue", n: rows.filter((r) => r.status === "overdue").length, tone: "bg-warn" },
   ];
+  const expected = rows.reduce((s, r) => s + r.fee, 0);
+  const received = rows.reduce((s, r) => s + Math.min(r.paid, r.fee), 0);
   return (
-    <Card title={widget.title ?? "Content this week"} href="/app/content" span={widget.span} delay={80}>
-      <ul className="grid gap-2 sm:grid-cols-2">
-        {posts.map((p) => (
-          <li key={p.title} className="rounded-xl bg-surface-2 p-3">
-            <span className="font-mono text-xs text-accent">{p.day}</span>
-            <span className="mt-1 block text-sm font-medium">{p.title}</span>
-            <span className="text-xs text-muted">{p.ch}</span>
-          </li>
-        ))}
-      </ul>
+    <Card title={widget.title ?? "Fees this month"} href="/app/finance" span={widget.span} delay={120} sample={false}>
+      {rows.length === 0 ? (
+        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">Add monthly fees to your students to track them here.</p>
+      ) : (
+        <div className="space-y-3">
+          {groups.map((f) => (
+            <div key={f.label}>
+              <div className="flex justify-between text-sm">
+                <span>{f.label}</span>
+                <span className="font-mono text-xs text-muted">
+                  {f.n} {f.n === 1 ? "student" : "students"}
+                </span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2">
+                <div className={`anim-fill h-1.5 rounded-full ${f.tone}`} style={{ width: `${(f.n / rows.length) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+          <p className="text-xs text-muted">
+            {fmtMoney(received, profile.currency)} of {fmtMoney(expected, profile.currency)} received
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ContentCalendar({ widget, data }: WidgetProps) {
+  const end = addDaysISO(data.today, 6);
+  const posts = data.content.filter((p) => p.date >= data.today && p.date <= end).slice(0, 6);
+  return (
+    <Card title={widget.title ?? "Content this week"} href="/app/content" span={widget.span} delay={80} sample={false}>
+      {posts.length === 0 ? (
+        <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">
+          Nothing planned for the next 7 days.{" "}
+          <Link href="/app/content" className="text-accent underline">
+            Plan a post
+          </Link>
+        </p>
+      ) : (
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {posts.map((p) => (
+            <li key={p.id} className="rounded-xl bg-surface-2 p-3">
+              <span className="font-mono text-xs text-accent">
+                {p.date === data.today ? "Today" : WEEK[isoWeekday(p.date) - 1]}
+                {p.time ? ` ${p.time}` : ""}
+              </span>
+              <span className="mt-1 block truncate text-sm font-medium">{p.title}</span>
+              <span className="text-xs text-muted">
+                {p.channel} · {p.status}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

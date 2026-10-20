@@ -36,7 +36,7 @@ async function run(fn: () => Promise<void>, success: string): Promise<FormState>
 }
 
 /** After deleting from a detail page, go back to its list. Only fixed in-app paths are allowed. */
-const AFTER_DELETE = new Set(["/app/clients", "/app/projects"]);
+const AFTER_DELETE = new Set(["/app/clients", "/app/students", "/app/projects"]);
 function goAfterDelete(fd: FormData) {
   const to = fd.get("then");
   if (typeof to === "string" && AFTER_DELETE.has(to)) redirect(to);
@@ -45,7 +45,7 @@ function goAfterDelete(fd: FormData) {
 // ---------------- Clients ----------------
 
 export async function saveClient(_prev: FormState, fd: FormData): Promise<FormState> {
-  const parsed = clientInput.safeParse(fields(fd, ["name", "company", "email", "phone", "status", "notes"]));
+  const parsed = clientInput.safeParse(fields(fd, ["name", "company", "email", "phone", "status", "notes", "monthlyFee", "feeDueDay", "classId"]));
   if (!parsed.success) return fail(parsed.error.issues[0].message);
   const id = fd.get("id");
   const { repo } = await getRepo();

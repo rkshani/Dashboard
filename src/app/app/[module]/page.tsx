@@ -20,6 +20,10 @@ import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { materializeRecurring } from "@/lib/recurring";
 import { getRates } from "@/lib/fx";
+import { feeRows } from "@/lib/teaching/fees";
+import { FeesPanel } from "@/components/app/views/FeesPanel";
+import { TimetableView } from "@/components/app/views/TimetableView";
+import { ContentView } from "@/components/app/views/ContentView";
 import { getTemplate } from "@/templates";
 
 /** What each module will do once built — shown so the shell is honest about progress. */
@@ -56,7 +60,10 @@ async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module
   if (mod.id === "clients" || mod.id === "students" || mod.id === "projects" || mod.id === "tasks") {
     const { repo, today } = await getRepo();
     const [clients, projects, tasks] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTasks()]);
-    if (mod.id === "clients" || mod.id === "students") return <ClientsView template={template} clients={clients} projects={projects} />;
+    if (mod.id === "clients" || mod.id === "students") {
+      const teaching = mod.id === "students" ? { classes: projects.filter((p) => p.status !== "done").map((p) => ({ id: p.id, title: p.title })), currency: profile.currency } : undefined;
+      return <ClientsView template={template} clients={clients} projects={projects} teaching={teaching} />;
+    }
     if (mod.id === "tasks") return <TasksView template={template} tasks={tasks} projects={projects} today={today} />;
     const sp = await searchParams;
     const view = sp.view === "list" ? "list" : "board";
@@ -79,7 +86,23 @@ async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module
     );
   }
 
-  if (mod.id === "calendar" || mod.id === "timetable") {
+  if (mod.id === "timetable") {
+    const { repo, today } = await getRepo();
+    const [slots, classes, clients, marks] = await Promise.all([repo.listSlots(), repo.listProjects(), repo.listClients(), repo.listAttendance(today, today)]);
+    const studentCount: Record<string, number> = {};
+    for (const c of clients) if (c.classId && c.status === "active") studentCount[c.classId] = (studentCount[c.classId] ?? 0) + 1;
+    return <TimetableView template={template} title={mod.label} slots={slots} classes={classes} today={today} studentCount={studentCount} markedToday={new Set(marks.map((m) => m.classId).filter((x): x is string => !!x))} />;
+  }
+
+  if (mod.id === "content") {
+    const { repo, today } = await getRepo();
+    const [posts, campaigns, clients, sp] = await Promise.all([repo.listContent(), repo.listProjects(), repo.listClients(), searchParams]);
+    const current = today.slice(0, 7);
+    const month = typeof sp.m === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.m) ? sp.m : current;
+    return <ContentView template={template} title={mod.label} posts={posts} campaigns={campaigns} clients={clients} today={today} month={month} />;
+  }
+
+  if (mod.id === "calendar") {
     const { repo, today, timezone, userId } = await getRepo();
     const [cal, tasks, projects, sp] = await Promise.all([getCalendar(repo, userId, timezone), repo.listTasks(), repo.listProjects(), searchParams]);
     let events: CalEvent[] = [];
@@ -132,7 +155,11 @@ async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module
     const sp = await searchParams;
     const current = monthKey(today);
     const m = typeof sp.m === "string" && /^\d{4}-\d{2}$/.test(sp.m) && sp.m <= current ? sp.m : current;
-    return <FinanceView template={template} recurring={recurring} fx={await getRates()} transactions={transactions} invoices={invoices} clients={clients} today={today} currency={currency} month={m} title={mod.label} />;
+    return (
+      <FinanceView template={template} recurring={recurring} fx={await getRates()} transactions={transactions} invoices={invoices} clients={clients} today={today} currency={currency} month={m} title={mod.label}>
+        {template.modules.some((x) => x.id === "students") && <FeesPanel rows={feeRows(clients, transactions, m, today)} month={m} currency={currency} senderName={profile.displayName} studentsHref="/app/students" />}
+      </FinanceView>
+    );
   }
 
   return (

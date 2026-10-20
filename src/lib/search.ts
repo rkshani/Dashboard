@@ -1,5 +1,5 @@
 /** Small, dependency-free search used by the command palette. Pure so it can be unit tested. */
-export type SearchKind = "client" | "project" | "task" | "invoice" | "opportunity";
+export type SearchKind = "client" | "project" | "task" | "invoice" | "opportunity" | "content";
 export type SearchDoc = { kind: SearchKind; id: string; title: string; subtitle?: string; extra?: string; href: string; done?: boolean };
 export type SearchHit = Omit<SearchDoc, "extra"> & { score: number };
 

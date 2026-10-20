@@ -17,6 +17,10 @@ export type Client = {
   phone: string | null;
   status: ClientStatus;
   notes: string | null;
+  /** Teachers: monthly fee, the day of the month it's due, and the student's class. */
+  monthlyFee: number | null;
+  feeDueDay: number | null;
+  classId: string | null;
   createdAt: string;
 };
 
@@ -82,6 +86,19 @@ export const clientInput = z.object({
   phone: optText(40),
   status: z.enum(CLIENT_STATUSES).default("active"),
   notes: optText(4000),
+  monthlyFee: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? Number(v) : null))
+    .refine((v) => v === null || (Number.isFinite(v) && v >= 0 && v < 1e10), "Fee must be a positive number."),
+  feeDueDay: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? Number(v) : null))
+    .refine((v) => v === null || (Number.isInteger(v) && v >= 1 && v <= 28), "Pick a due day from 1 to 28."),
+  classId: optUuid,
 });
 export type ClientInput = z.output<typeof clientInput>;
 
@@ -240,3 +257,51 @@ export const businessInput = z.object({
   paymentDetails: optText(1000),
   defaultDueDays: z.coerce.number().int().min(0).max(120).default(14),
 });
+
+// ---------------- Teaching ----------------
+
+export const ATTENDANCE = ["present", "late", "absent"] as const;
+export type AttendanceStatus = (typeof ATTENDANCE)[number];
+export type AttendanceEntry = { clientId: string; date: string; status: AttendanceStatus; classId: string | null };
+
+/** A weekly class slot. weekday: 1 = Monday … 7 = Sunday. Times are local "HH:MM". */
+export type TimetableSlot = { id: string; classId: string; weekday: number; start: string; end: string; location: string | null };
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a time like 16:30.");
+export const slotInput = z
+  .object({ classId: z.string().regex(/^[0-9a-f-]{36}$/i, "Pick a class."), weekday: z.coerce.number().int().min(1).max(7), start: hhmm, end: hhmm, location: optText(120) })
+  .refine((v) => v.end > v.start, { message: "End time must be after the start.", path: ["end"] });
+export type SlotInput = z.output<typeof slotInput>;
+
+// ---------------- Content calendar ----------------
+
+export const CONTENT_STATUSES = ["idea", "draft", "scheduled", "published"] as const;
+export type ContentStatus = (typeof CONTENT_STATUSES)[number];
+export const CHANNELS = ["Instagram", "TikTok", "YouTube", "LinkedIn", "Facebook", "X", "Blog", "Newsletter", "Other"] as const;
+export type ContentPost = {
+  id: string;
+  title: string;
+  channel: string;
+  date: string;
+  time: string | null;
+  status: ContentStatus;
+  caption: string | null;
+  campaignId: string | null;
+  clientId: string | null;
+  createdAt: string;
+};
+export const contentInput = z.object({
+  title: z.string().trim().min(1, "Give the post a title.").max(160),
+  channel: z.enum(CHANNELS),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date."),
+  time: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : null))
+    .refine((v) => v === null || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), "Use a time like 18:00."),
+  status: z.enum(CONTENT_STATUSES).default("idea"),
+  caption: optText(3000),
+  campaignId: optUuid,
+  clientId: optUuid,
+});
+export type ContentInput = z.output<typeof contentInput>;

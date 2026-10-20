@@ -21,7 +21,9 @@ export function FinanceView({
   currency,
   month,
   title,
+  children,
 }: {
+  children?: React.ReactNode;
   template: Template;
   transactions: Transaction[];
   recurring: RecurringTxn[];
@@ -124,6 +126,8 @@ export function FinanceView({
           </div>
         ))}
       </div>
+
+      {children}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <section aria-label="Last six months" className="anim-rise min-w-0 rounded-2xl border border-line bg-surface p-5 lg:col-span-2" style={{ animationDelay: "150ms" }}>

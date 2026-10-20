@@ -7,14 +7,14 @@ import { DEFAULT_SETTINGS, type AutomationLogEntry, type AutomationSettings } fr
 import type { CalEvent, NewEvent } from "@/lib/calendar/types";
 import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
 import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
-import type { Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { AttendanceEntry, ContentInput, ContentPost, ContentStatus, SlotInput, TimetableSlot, Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 /**
  * In-memory store for demo mode, one per demo session id.
  * It lives in the server process: restarting the server resets it.
  * Capped so a public demo can't be used to fill memory.
  */
-type Store = { proposals?: Record<string, Proposal>; notifications?: AppNotification[]; push?: PushSubscriptionRecord[]; recurring: RecurringTxn[]; clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
+type Store = { attendance?: AttendanceEntry[]; slots?: TimetableSlot[]; content?: ContentPost[]; proposals?: Record<string, Proposal>; notifications?: AppNotification[]; push?: PushSubscriptionRecord[]; recurring: RecurringTxn[]; clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
 const LIMIT = { recurring: 50, sessions: 500, clients: 200, projects: 200, tasks: 1000, transactions: 2000, invoices: 300 };
 
 const g = globalThis as unknown as { __dashDemo?: Map<string, Store> };
@@ -40,9 +40,9 @@ function seed(today: string, currency: string, tzOffset: number): Store {
     log: [],
     events: demoEvents(today, tzOffset),
     clients: [
-      { id: c1, name: "Ayesha Khan", company: "Northwind Retail", email: "ayesha@example.com", phone: null, status: "active", notes: "Prefers WhatsApp updates on Fridays.", createdAt: now },
-      { id: c2, name: "Omar Siddiqui", company: "Bright Clinic", email: "omar@example.com", phone: null, status: "active", notes: null, createdAt: now },
-      { id: randomUUID(), name: "Sara Ahmed", company: "Startup lead", email: null, phone: null, status: "lead", notes: "Asked for a quote last week.", createdAt: now },
+      { id: c1, name: "Ayesha Khan", company: "Northwind Retail", email: "ayesha@example.com", phone: null, status: "active", notes: "Prefers WhatsApp updates on Fridays.", monthlyFee: null, feeDueDay: null, classId: null, createdAt: now },
+      { id: c2, name: "Omar Siddiqui", company: "Bright Clinic", email: "omar@example.com", phone: null, status: "active", notes: null, monthlyFee: null, feeDueDay: null, classId: null, createdAt: now },
+      { id: randomUUID(), name: "Sara Ahmed", company: "Startup lead", email: null, phone: null, status: "lead", notes: "Asked for a quote last week.", monthlyFee: null, feeDueDay: null, classId: null, createdAt: now },
     ],
     projects: [
       { id: p1, clientId: c1, title: "Retail POS app", status: "active", deadline: addDays(today, 12), budget: 2400, description: "Point of sale and inventory app.", createdAt: now },
@@ -72,7 +72,85 @@ function seed(today: string, currency: string, tzOffset: number): Store {
   };
 }
 
-function getStore(sessionId: string, today: string, currency: string, tzOffset: number): Store {
+/** Weekday of a YYYY-MM-DD date, 1 = Monday … 7 = Sunday. */
+function isoWeekday(date: string) {
+  return ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+}
+
+/** Teacher demo: classes, students with monthly fees, a weekly timetable and some attendance. */
+function seedTeacher(base: Store, today: string, currency: string): Store {
+  const now = new Date().toISOString();
+  const big = ["PKR", "INR"].includes(currency);
+  const fee = (n: number) => (big ? n * 1000 : n * 10);
+  const physics = randomUUID(), chem = randomUUID(), ielts = randomUUID();
+  const students = [
+    { name: "Hamza Ali", company: "Guardian: Mr. Ali", cls: physics, fee: fee(8), day: 5 },
+    { name: "Zara Malik", company: "Guardian: Mrs. Malik", cls: physics, fee: fee(8), day: 5 },
+    { name: "Usman Tariq", company: "Guardian: Mr. Tariq", cls: chem, fee: fee(10), day: 10 },
+    { name: "Mariam Shah", company: null, cls: chem, fee: fee(10), day: 1 },
+    { name: "Bilal Raza", company: null, cls: ielts, fee: fee(6), day: 15 },
+  ].map((x) => ({ id: randomUUID(), name: x.name, company: x.company, email: null, phone: "+92 300 0000000", status: "active" as const, notes: null, monthlyFee: x.fee, feeDueDay: x.day, classId: x.cls, createdAt: now }));
+  const month = today.slice(0, 7);
+  const prev = addDays(`${month}-01`, -1).slice(0, 7);
+  const paid = (c: (typeof students)[number], m: string) => ({ id: randomUUID(), kind: "income" as const, amount: c.monthlyFee!, currency, category: "Fees", date: `${m}-${String(Math.min(c.feeDueDay!, 28)).padStart(2, "0")}`, note: `Fee for ${m}`, clientId: c.id, projectId: c.classId, invoiceId: null, createdAt: now });
+  const attendance: AttendanceEntry[] = [];
+  for (let d = 1; d <= 7; d++) {
+    const date = addDays(today, -d);
+    if (isoWeekday(date) > 5) continue;
+    for (const [i, c] of students.entries()) attendance.push({ clientId: c.id, date, classId: c.classId, status: (i + d) % 7 === 0 ? "absent" : (i + d) % 5 === 0 ? "late" : "present" });
+  }
+  return {
+    ...base,
+    clients: students,
+    projects: [
+      { id: physics, clientId: null, title: "O Level Physics (Group A)", status: "active", deadline: addDays(today, 20), budget: null, description: "Mechanics and waves this term. Test on the 20th.", createdAt: now },
+      { id: chem, clientId: null, title: "A Level Chemistry", status: "active", deadline: null, budget: null, description: "Organic chemistry unit.", createdAt: now },
+      { id: ielts, clientId: null, title: "IELTS evening batch", status: "active", deadline: null, budget: null, description: null, createdAt: now },
+    ],
+    invoices: [],
+    transactions: [
+      ...students.map((c) => paid(c, prev)),
+      ...students.slice(0, 2).map((c) => paid(c, month)),
+      { id: randomUUID(), kind: "expense", amount: fee(2), currency, category: "Other", date: addDays(today, -6), note: "Printing test papers", clientId: null, projectId: null, invoiceId: null, createdAt: now },
+    ],
+    tasks: [
+      { id: randomUUID(), projectId: chem, title: "Mark Chemistry test papers", dueDate: today, priority: "high", done: false, doneAt: null, repeat: "none", createdAt: now },
+      { id: randomUUID(), projectId: physics, title: "Prepare waves worksheet", dueDate: addDays(today, 2), priority: "normal", done: false, doneAt: null, repeat: "none", createdAt: now },
+      { id: randomUUID(), projectId: null, title: "Send monthly progress notes to parents", dueDate: addDays(today, 5), priority: "normal", done: false, doneAt: null, repeat: "monthly", createdAt: now },
+    ],
+    slots: [
+      ...[1, 2, 3, 4, 5].map((w) => ({ id: randomUUID(), classId: physics, weekday: w, start: "16:00", end: "17:00", location: "Home, room 1" })),
+      ...[2, 4, 6].map((w) => ({ id: randomUUID(), classId: chem, weekday: w, start: "17:30", end: "19:00", location: "Online (Google Meet)" })),
+      { id: randomUUID(), classId: ielts, weekday: 6, start: "11:00", end: "12:30", location: "Online (Zoom)" },
+    ],
+    attendance,
+    events: [],
+  };
+}
+
+/** Marketer demo: a content calendar around today. */
+function seedMarketer(base: Store, today: string): Store {
+  const now = new Date().toISOString();
+  const [c1, c2] = base.clients;
+  const [p1, p2] = base.projects;
+  Object.assign(p1, { title: "Saffron Eats: winter menu launch", description: "Reels and stories for the new menu.", budget: 1200 });
+  Object.assign(p2, { title: "Bright Clinic: awareness month", description: "LinkedIn and Facebook series.", budget: 900 });
+  const post = (d: number, title: string, channel: string, status: ContentPost["status"], time: string | null, campaign: string | null, client: string | null): ContentPost => ({ id: randomUUID(), title, channel, date: addDays(today, d), time, status, caption: null, campaignId: campaign, clientId: client, createdAt: now });
+  return {
+    ...base,
+    content: [
+      post(-3, "Behind the scenes: kitchen prep", "Instagram", "published", "18:00", p1.id, c1.id),
+      post(-1, "Menu teaser reel", "TikTok", "published", "19:00", p1.id, c1.id),
+      post(0, "Winter menu carousel", "Instagram", "scheduled", "18:30", p1.id, c1.id),
+      post(1, "Doctor Q&A clip", "LinkedIn", "draft", "10:00", p2.id, c2.id),
+      post(3, "5 signs to book a check-up", "Facebook", "draft", null, p2.id, c2.id),
+      post(5, "Customer review montage", "Instagram", "idea", null, p1.id, c1.id),
+      post(8, "How I plan a month of content", "YouTube", "idea", null, null, null),
+    ],
+  };
+}
+
+function getStore(sessionId: string, today: string, currency: string, tzOffset: number, templateId = "software-engineer"): Store {
   let s = stores.get(sessionId);
   if (!s) {
     if (stores.size >= LIMIT.sessions) {
@@ -80,6 +158,8 @@ function getStore(sessionId: string, today: string, currency: string, tzOffset: 
       if (oldest) stores.delete(oldest[0]);
     }
     s = seed(today, currency, tzOffset);
+    if (templateId === "teacher") s = seedTeacher(s, today, currency);
+    else if (templateId === "marketer") s = seedMarketer(s, today);
     stores.set(sessionId, s);
   }
   s.touched = Date.now();
@@ -120,8 +200,9 @@ export class DemoRepo implements Repo {
     today: string,
     currency: string,
     private tzOffset = 300,
+    templateId?: string,
   ) {
-    this.s = getStore(sessionId, today, currency, tzOffset);
+    this.s = getStore(sessionId, today, currency, tzOffset, templateId);
   }
 
   async listClients() {
@@ -129,6 +210,7 @@ export class DemoRepo implements Repo {
   }
   async createClient(i: ClientInput) {
     cap(this.s.clients.length, LIMIT.clients);
+    if (i.classId && !this.s.projects.some((p) => p.id === i.classId)) throw new NotFoundError();
     const c: Client = { id: randomUUID(), ...i, createdAt: new Date().toISOString() };
     this.s.clients.unshift(c);
     return c;
@@ -136,11 +218,14 @@ export class DemoRepo implements Repo {
   async updateClient(id: string, i: ClientInput) {
     const c = this.s.clients.find((x) => x.id === id);
     if (!c) throw new NotFoundError();
+    if (i.classId && !this.s.projects.some((p) => p.id === i.classId)) throw new NotFoundError();
     Object.assign(c, i);
   }
   async deleteClient(id: string) {
     this.s.clients = this.s.clients.filter((x) => x.id !== id);
     for (const p of this.s.projects) if (p.clientId === id) p.clientId = null;
+    this.s.attendance = (this.s.attendance ?? []).filter((a) => a.clientId !== id);
+    for (const c of this.s.content ?? []) if (c.clientId === id) c.clientId = null;
   }
 
   async listProjects() {
@@ -167,6 +252,9 @@ export class DemoRepo implements Repo {
   async deleteProject(id: string) {
     this.s.projects = this.s.projects.filter((x) => x.id !== id);
     for (const t of this.s.tasks) if (t.projectId === id) t.projectId = null;
+    for (const c of this.s.clients) if (c.classId === id) c.classId = null;
+    this.s.slots = (this.s.slots ?? []).filter((x) => x.classId !== id);
+    for (const c of this.s.content ?? []) if (c.campaignId === id) c.campaignId = null;
   }
 
   async listTasks() {
@@ -306,6 +394,56 @@ export class DemoRepo implements Repo {
   }
 
   // Google isn't available in demo mode; the calendar uses demo events instead.
+  async listAttendance(from: string, to: string) {
+    return (this.s.attendance ??= []).filter((a) => a.date >= from && a.date <= to);
+  }
+  async saveAttendance(date: string, classId: string | null, marks: { clientId: string; status: AttendanceEntry["status"] }[]) {
+    const known = new Set(this.s.clients.map((c) => c.id));
+    const ids = new Set(marks.map((m) => m.clientId));
+    const kept = (this.s.attendance ??= []).filter((a) => !(a.date === date && ids.has(a.clientId)));
+    for (const m of marks) if (known.has(m.clientId)) kept.push({ clientId: m.clientId, date, status: m.status, classId });
+    this.s.attendance = kept.slice(-5000);
+  }
+
+  async listSlots() {
+    return [...(this.s.slots ??= [])].sort((a, b) => a.weekday - b.weekday || a.start.localeCompare(b.start));
+  }
+  async createSlot(i: SlotInput) {
+    cap((this.s.slots ??= []).length, 100);
+    if (!this.s.projects.some((p) => p.id === i.classId)) throw new NotFoundError();
+    const slot: TimetableSlot = { id: randomUUID(), ...i };
+    this.s.slots.push(slot);
+    return slot;
+  }
+  async deleteSlot(id: string) {
+    this.s.slots = (this.s.slots ??= []).filter((x) => x.id !== id);
+  }
+
+  async listContent() {
+    return [...(this.s.content ??= [])].sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""));
+  }
+  async createContent(i: ContentInput) {
+    cap((this.s.content ??= []).length, 500);
+    if (i.campaignId && !this.s.projects.some((p) => p.id === i.campaignId)) throw new NotFoundError();
+    if (i.clientId && !this.s.clients.some((c) => c.id === i.clientId)) throw new NotFoundError();
+    const post: ContentPost = { id: randomUUID(), ...i, createdAt: new Date().toISOString() };
+    this.s.content.push(post);
+    return post;
+  }
+  async updateContent(id: string, i: ContentInput) {
+    const post = (this.s.content ??= []).find((x) => x.id === id);
+    if (!post) throw new NotFoundError();
+    Object.assign(post, i);
+  }
+  async setContentStatus(id: string, status: ContentStatus) {
+    const post = (this.s.content ??= []).find((x) => x.id === id);
+    if (!post) throw new NotFoundError();
+    post.status = status;
+  }
+  async deleteContent(id: string) {
+    this.s.content = (this.s.content ??= []).filter((x) => x.id !== id);
+  }
+
   async getProposal(postingId: string) {
     return (this.s.proposals ??= {})[postingId] ?? null;
   }

@@ -14,13 +14,14 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
   if (!parsed.success || !parsed.data.trim()) return [];
   const { repo, userId } = await getRepo();
   if (!rateLimit(`search:${userId}`, 120, 60_000)) return [];
-  const [clients, projects, tasks, invoices, postings, statuses] = await Promise.all([
+  const [clients, projects, tasks, invoices, postings, statuses, content] = await Promise.all([
     repo.listClients(),
     repo.listProjects(),
     repo.listTasks(),
     repo.listInvoices(),
     repo.listPostings(),
     repo.listOpportunityStatuses(),
+    repo.listContent(),
   ]);
   const clientName = new Map(clients.map((c) => [c.id, c.name]));
   const projectTitle = new Map(projects.map((p) => [p.id, p.title]));
@@ -36,6 +37,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       extra: `${i.items.map((x) => x.description).join(" ")} ${i.notes ?? ""}`,
       href: `/app/invoice/${i.id}`,
     })),
+    ...content.map((p) => ({ kind: "content" as const, id: p.id, title: p.title, subtitle: `${p.channel} · ${p.date}`, extra: p.caption ?? "", href: `/app/content?m=${p.date.slice(0, 7)}`, done: p.status === "published" })),
     // Only opportunities the user has acted on; the open feed is browsed on its own page.
     ...postings
       .filter((p) => statuses[p.id] && statuses[p.id] !== "dismissed")

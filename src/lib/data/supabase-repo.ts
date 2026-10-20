@@ -5,9 +5,12 @@ import type { PipelineStatus, Posting, SourceId } from "@/lib/opportunities/type
 import { DEFAULT_SETTINGS, type AutomationSettings } from "@/lib/automations/types";
 import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
 import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
-import type { Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { AttendanceEntry, ContentInput, ContentPost, ContentStatus, SlotInput, TimetableSlot, Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
-type ClientRow = { id: string; name: string; company: string | null; email: string | null; phone: string | null; status: Client["status"]; notes: string | null; created_at: string };
+type ClientRow = { id: string; name: string; company: string | null; email: string | null; phone: string | null; status: Client["status"]; notes: string | null; monthly_fee: number | string | null; fee_due_day: number | null; class_id: string | null; created_at: string };
+type ContentRow = { id: string; title: string; channel: string; date: string; time: string | null; status: ContentStatus; caption: string | null; campaign_id: string | null; client_id: string | null; created_at: string };
+const toContent = (r: ContentRow): ContentPost => ({ id: r.id, title: r.title, channel: r.channel, date: r.date, time: r.time ? r.time.slice(0, 5) : null, status: r.status, caption: r.caption, campaignId: r.campaign_id, clientId: r.client_id, createdAt: r.created_at });
+const contentRow = (i: ContentInput) => ({ title: i.title, channel: i.channel, date: i.date, time: i.time, status: i.status, caption: i.caption, campaign_id: i.campaignId, client_id: i.clientId });
 type ProjectRow = { id: string; client_id: string | null; title: string; status: ProjectStatus; deadline: string | null; budget: number | string | null; description: string | null; created_at: string };
 type TaskRow = { id: string; project_id: string | null; title: string; due_date: string | null; priority: Task["priority"]; done: boolean; done_at: string | null; repeat: Task["repeat"] | null; created_at: string };
 type RecRow = { id: string; kind: RecurringTxn["kind"]; amount: number | string; currency: string; category: string; note: string | null; client_id: string | null; project_id: string | null; cadence: RecurringTxn["cadence"]; start_date: string; next_date: string; created_at: string };
@@ -33,7 +36,7 @@ const toInvoice = (r: InvoiceRow): Invoice => ({
   createdAt: r.created_at,
 });
 
-const toClient = (r: ClientRow): Client => ({ id: r.id, name: r.name, company: r.company, email: r.email, phone: r.phone, status: r.status, notes: r.notes, createdAt: r.created_at });
+const toClient = (r: ClientRow): Client => ({ id: r.id, name: r.name, company: r.company, email: r.email, phone: r.phone, status: r.status, notes: r.notes, monthlyFee: r.monthly_fee === null ? null : Number(r.monthly_fee), feeDueDay: r.fee_due_day, classId: r.class_id, createdAt: r.created_at });
 const toProject = (r: ProjectRow): Project => ({
   id: r.id,
   clientId: r.client_id,
@@ -89,17 +92,17 @@ export class SupabaseRepo implements Repo {
   }
 
   async listClients() {
-    const { data, error } = await this.db.from("clients").select("id,name,company,email,phone,status,notes,created_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(500);
+    const { data, error } = await this.db.from("clients").select("id,name,company,email,phone,status,notes,monthly_fee,fee_due_day,class_id,created_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(500);
     check(error);
     return (data as ClientRow[]).map(toClient);
   }
   async createClient(i: ClientInput) {
-    const { data, error } = await this.db.from("clients").insert({ owner_id: this.owner, name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes }).select().single<ClientRow>();
+    const { data, error } = await this.db.from("clients").insert({ owner_id: this.owner, name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes, monthly_fee: i.monthlyFee, fee_due_day: i.feeDueDay, class_id: i.classId }).select().single<ClientRow>();
     check(error);
     return toClient(data!);
   }
   async updateClient(id: string, i: ClientInput) {
-    const { data, error } = await this.db.from("clients").update({ name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes }).eq("owner_id", this.owner).eq("id", id).select("id");
+    const { data, error } = await this.db.from("clients").update({ name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes, monthly_fee: i.monthlyFee, fee_due_day: i.feeDueDay, class_id: i.classId }).eq("owner_id", this.owner).eq("id", id).select("id");
     check(error);
     if (!data?.length) throw new NotFoundError();
   }
@@ -362,6 +365,57 @@ export class SupabaseRepo implements Repo {
   }
 
   // ---------------- Integrations ----------------
+
+  async listAttendance(from: string, to: string) {
+    const { data, error } = await this.db.from("attendance").select("client_id,date,status,class_id").eq("owner_id", this.owner).gte("date", from).lte("date", to).limit(5000);
+    check(error);
+    return (data ?? []).map((r) => ({ clientId: r.client_id as string, date: r.date as string, status: r.status as AttendanceEntry["status"], classId: (r.class_id as string | null) ?? null }));
+  }
+  async saveAttendance(date: string, classId: string | null, marks: { clientId: string; status: AttendanceEntry["status"] }[]) {
+    if (!marks.length) return;
+    const rows = marks.map((m) => ({ owner_id: this.owner, client_id: m.clientId, date, status: m.status, class_id: classId }));
+    const { error } = await this.db.from("attendance").upsert(rows, { onConflict: "owner_id,client_id,date" });
+    check(error);
+  }
+
+  async listSlots() {
+    const { data, error } = await this.db.from("timetable_slots").select("id,class_id,weekday,start_time,end_time,location").eq("owner_id", this.owner).order("weekday").order("start_time").limit(300);
+    check(error);
+    return (data ?? []).map((r) => ({ id: r.id as string, classId: r.class_id as string, weekday: r.weekday as number, start: String(r.start_time).slice(0, 5), end: String(r.end_time).slice(0, 5), location: (r.location as string | null) ?? null }));
+  }
+  async createSlot(i: SlotInput) {
+    const { data, error } = await this.db.from("timetable_slots").insert({ owner_id: this.owner, class_id: i.classId, weekday: i.weekday, start_time: i.start, end_time: i.end, location: i.location }).select("id").single();
+    check(error);
+    return { id: data!.id as string, ...i } satisfies TimetableSlot;
+  }
+  async deleteSlot(id: string) {
+    const { error } = await this.db.from("timetable_slots").delete().eq("owner_id", this.owner).eq("id", id);
+    check(error);
+  }
+
+  async listContent() {
+    const { data, error } = await this.db.from("content_posts").select("*").eq("owner_id", this.owner).order("date").limit(2000);
+    check(error);
+    return (data as ContentRow[]).map(toContent);
+  }
+  async createContent(i: ContentInput) {
+    const { data, error } = await this.db.from("content_posts").insert({ owner_id: this.owner, ...contentRow(i) }).select().single<ContentRow>();
+    check(error);
+    return toContent(data!);
+  }
+  async updateContent(id: string, i: ContentInput) {
+    const { data, error } = await this.db.from("content_posts").update(contentRow(i)).eq("owner_id", this.owner).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw new NotFoundError();
+  }
+  async setContentStatus(id: string, status: ContentStatus) {
+    const { error } = await this.db.from("content_posts").update({ status }).eq("owner_id", this.owner).eq("id", id);
+    check(error);
+  }
+  async deleteContent(id: string) {
+    const { error } = await this.db.from("content_posts").delete().eq("owner_id", this.owner).eq("id", id);
+    check(error);
+  }
 
   async getProposal(postingId: string) {
     const { data, error } = await this.db.from("proposals").select("opportunity_id,body,source,updated_at").eq("owner_id", this.owner).eq("opportunity_id", postingId).maybeSingle();

@@ -17,6 +17,7 @@ const kindLabel: Record<SearchHit["kind"], { group: string; icon: string }> = {
   task: { group: "Tasks", icon: "check" },
   invoice: { group: "Invoices", icon: "file" },
   opportunity: { group: "Pipeline", icon: "radar" },
+  content: { group: "Content", icon: "calendar" },
 };
 
 /** Ctrl+K / ⌘K anywhere in the app: jump to a page, run a quick action, or search your data. */
@@ -92,7 +93,11 @@ export function CommandPalette({ items }: { items: NavItem[] }) {
   const nq = normalize(query);
   const pages: Row[] = items.map((i) => ({ key: `p-${i.href}`, label: i.label, hint: "Go to", href: i.href, group: "Pages", icon: i.icon }));
   const local = [...pages, ...actions].filter((r) => !nq || normalize(r.label).includes(nq));
-  const data: Row[] = hits.map((h) => ({ key: `${h.kind}-${h.id}`, label: h.title, hint: h.subtitle, href: h.href, group: kindLabel[h.kind].group, icon: kindLabel[h.kind].icon }));
+  // Keep results grouped by type, with groups ordered by their best match.
+  const firstSeen = new Map<string, number>();
+  hits.forEach((h, i) => firstSeen.has(h.kind) || firstSeen.set(h.kind, i));
+  const grouped = [...hits].sort((a, b) => firstSeen.get(a.kind)! - firstSeen.get(b.kind)!);
+  const data: Row[] = grouped.map((h) => ({ key: `${h.kind}-${h.id}`, label: h.title, hint: h.subtitle, href: h.href, group: kindLabel[h.kind].group, icon: kindLabel[h.kind].icon }));
   const rows = nq ? [...data, ...local] : local;
 
   const go = (r: Row | undefined) => {

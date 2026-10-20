@@ -34,6 +34,8 @@ async function Home() {
   const { repo, today: todayIso, userId, timezone } = await getRepo();
   await materializeRecurring(repo, todayIso);
   const [clients, projects, tasks, rawTransactions, rawInvoices, feed, automationLog, fx] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTasks(), repo.listTransactions(), repo.listInvoices(), getFeed(repo, profile), repo.listAutomationLog(4), getRates()]);
+  const needs = new Set(template.widgets.map((w) => w.type));
+  const [slots, content] = await Promise.all([needs.has("timetable") ? repo.listSlots() : [], needs.has("content-calendar") ? repo.listContent() : []]);
   // Widgets show totals in the profile currency, so convert everything up front.
   const transactions = toCurrency(rawTransactions, "amount", profile.currency, fx);
   const invoices = toCurrency(rawInvoices, "total", profile.currency, fx);
@@ -62,7 +64,7 @@ async function Home() {
           Widgets marked <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold">Sample</span> show example data until that module is connected.
         </p>
       </header>
-      <WidgetGrid template={template} profile={profile} data={{ clients, projects, tasks, transactions, invoices, feed, demoFeed, events, calendarMode: cal.state.mode, timezone, automationLog, today: todayIso }} />
+      <WidgetGrid template={template} profile={profile} data={{ clients, projects, tasks, transactions, invoices, feed, demoFeed, events, calendarMode: cal.state.mode, timezone, automationLog, today: todayIso, slots, content }} />
     </div>
   );
 }

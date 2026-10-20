@@ -6,6 +6,8 @@ import type { Profile } from "@/lib/profile";
 import type { Template } from "@/templates";
 import type { AutomationSettings } from "./types";
 import { notify } from "@/lib/notifications/notify";
+import { fmtMoney, monthLabel } from "@/lib/money";
+import { feeRows } from "@/lib/teaching/fees";
 
 export function ruleEnabled(template: Template, settings: AutomationSettings, id: string) {
   const def = template.automations.find((a) => a.id === id);
@@ -69,5 +71,44 @@ export async function runAutomations(ctx: { repo: Repo; profile: Profile; templa
     }
   }
 
+  // 4. Teachers: a student's fee is a few days overdue → reminder task + notification.
+  if (on("fee-reminder") && template.modules.some((m) => m.id === "students")) {
+    const month = today.slice(0, 7);
+    const [clients, txns] = await Promise.all([repo.listClients(), repo.listTransactions()]);
+    for (const row of feeRows(clients, txns, month, today).filter((r) => r.status === "overdue")) {
+      const message = `${row.student.name}'s fee for ${monthLabel(month)} is ${row.daysLate} days late: added a reminder`;
+      if (await repo.logAutomation("fee-reminder", `${row.student.id}:${month}`, message)) {
+        await repo.createTask({ title: `Collect fee: ${row.student.name} (${monthLabel(month, "short")})`.slice(0, 200), projectId: row.student.classId, dueDate: today, priority: "high" });
+        await notify(repo, { kind: "money", title: `${row.student.name}'s fee is overdue`, body: `${fmtMoney(row.fee - row.paid, profile.currency)} for ${monthLabel(month)}, due ${row.dueDate}.`, href: "/app/finance" });
+        done.push({ ruleId: "fee-reminder", message });
+      }
+    }
+  }
+
+  // 5. Marketers: a scheduled post goes out within the hour → reminder with its caption.
+  if (on("post-reminder") && template.modules.some((m) => m.id === "content")) {
+    const now = localMinutes(profile.timezone);
+    for (const post of (await repo.listContent()).filter((p) => p.status !== "published" && p.date === today && p.time)) {
+      const [h, m] = post.time!.split(":").map(Number);
+      const until = h * 60 + m - now;
+      if (until < 0 || until > 75) continue;
+      const message = `"${post.title}" goes out on ${post.channel} at ${post.time}: sent a reminder`;
+      if (await repo.logAutomation("post-reminder", `${post.id}:${post.date}:${post.time}`, message)) {
+        await notify(repo, { kind: "task", title: `Post at ${post.time}: ${post.title}`, body: post.caption ? `${post.channel} · ${post.caption}` : `${post.channel}${post.status !== "scheduled" ? ` · still a ${post.status}` : ""}`, href: "/app/content" });
+        done.push({ ruleId: "post-reminder", message });
+      }
+    }
+  }
+
   return done;
+}
+
+function localMinutes(timezone: string) {
+  try {
+    const [h, m] = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: timezone }).format(new Date()).split(":").map(Number);
+    return h * 60 + m;
+  } catch {
+    const d = new Date();
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+  }
 }

@@ -29,7 +29,7 @@ demo session (seeded with examples; restarting the server resets them).
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0010`).
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0011`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -75,6 +75,8 @@ demo session (seeded with examples; restarting the server resets them).
 | Exchange rates (ExchangeRate-API, no key) and pay matching | `src/lib/fx.ts`, `src/lib/fx-math.ts`, `src/lib/opportunities/match.ts` |
 | Notifications (in-app + web push) | `src/lib/notifications/`, `src/app/app/notifications/`, `public/sw.js` |
 | Proposal and cover-letter drafts (Claude, with a template fallback) | `src/lib/proposals/`, `src/app/app/proposal/[id]/` |
+| Teachers: fees per student, attendance, weekly timetable | `src/lib/teaching/`, `src/components/app/views/FeesPanel.tsx`, `TimetableView.tsx`, `src/app/app/attendance/` |
+| Marketers: content calendar | `src/components/app/views/ContentView.tsx`, `src/app/app/content-actions.ts` |
 | Unit tests (`npm test`) | `tests/` |
 | Database migrations | `supabase/migrations/` |
 

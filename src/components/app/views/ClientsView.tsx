@@ -9,7 +9,9 @@ import type { Template } from "@/templates";
 export const clientStatusLabel: Record<Client["status"], string> = { lead: "Lead", active: "Active", past: "Past" };
 export const clientStatusTone: Record<Client["status"], string> = { lead: "bg-warn/15 text-warn", active: "bg-good/15 text-good", past: "bg-surface-2 text-muted" };
 
-export function ClientFields({ client, v }: { client?: Client; v: Template["vocabulary"] }) {
+export type TeachingOpts = { classes: { id: string; title: string }[]; currency: string };
+
+export function ClientFields({ client, v, teaching }: { client?: Client; v: Template["vocabulary"]; teaching?: TeachingOpts }) {
   const uid = client?.id ?? "new";
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -19,9 +21,34 @@ export function ClientFields({ client, v }: { client?: Client; v: Template["voca
         <input name="name" required maxLength={120} defaultValue={client?.name} className={inputCls} placeholder={`${v.client} name`} />
       </label>
       <label className="flex flex-col gap-1.5">
-        <span className={labelCls}>Company / organisation</span>
+        <span className={labelCls}>{teaching ? "Guardian / parent" : "Company / organisation"}</span>
         <input name="company" maxLength={120} defaultValue={client?.company ?? ""} className={inputCls} />
       </label>
+      {teaching && (
+        <>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelCls}>{v.project}</span>
+            <select name="classId" defaultValue={client?.classId ?? ""} className={inputCls}>
+              <option value="">None</option>
+              {teaching.classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className={labelCls}>Monthly fee ({teaching.currency})</span>
+              <input name="monthlyFee" type="number" min="0" step="any" inputMode="decimal" defaultValue={client?.monthlyFee ?? ""} className={inputCls} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelCls}>Due on day</span>
+              <input name="feeDueDay" type="number" min="1" max="28" defaultValue={client?.feeDueDay ?? ""} placeholder="1–28" className={inputCls} />
+            </label>
+          </div>
+        </>
+      )}
       <label className="flex flex-col gap-1.5">
         <span className={labelCls}>Email</span>
         <input name="email" type="email" maxLength={254} defaultValue={client?.email ?? ""} className={inputCls} />
@@ -49,7 +76,8 @@ export function ClientFields({ client, v }: { client?: Client; v: Template["voca
   );
 }
 
-export function ClientsView({ template, clients, projects }: { template: Template; clients: Client[]; projects: Project[] }) {
+export function ClientsView({ template, clients, projects, teaching }: { template: Template; clients: Client[]; projects: Project[]; teaching?: TeachingOpts }) {
+  const className = new Map(projects.map((p) => [p.id, p.title]));
   const v = template.vocabulary;
   const projectCount = (id: string) => projects.filter((p) => p.clientId === id).length;
   const order: Client["status"][] = ["active", "lead", "past"];
@@ -72,7 +100,7 @@ export function ClientsView({ template, clients, projects }: { template: Templat
         </summary>
         <div className="border-t border-line p-5">
           <ActionForm action={saveClient} submitLabel={`Add ${v.client.toLowerCase()}`} resetOnSuccess>
-            <ClientFields v={v} />
+            <ClientFields v={v} teaching={teaching} />
           </ActionForm>
         </div>
       </details>
@@ -95,7 +123,9 @@ export function ClientsView({ template, clients, projects }: { template: Templat
                     <span className="block truncate text-xs text-muted">{[c.company, c.email].filter(Boolean).join(" · ") || "No details yet"}</span>
                   </span>
                   <span className="text-xs text-muted">
-                    {projectCount(c.id)} {projectCount(c.id) === 1 ? v.project.toLowerCase() : v.projects.toLowerCase()}
+                    {teaching
+                      ? [c.classId ? className.get(c.classId) : null, c.monthlyFee ? `${teaching.currency} ${c.monthlyFee.toLocaleString("en-US")}/month` : null].filter(Boolean).join(" · ") || "No class yet"
+                      : `${projectCount(c.id)} ${projectCount(c.id) === 1 ? v.project.toLowerCase() : v.projects.toLowerCase()}`}
                   </span>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${clientStatusTone[c.status]}`}>{clientStatusLabel[c.status]}</span>
                 </summary>
@@ -104,7 +134,7 @@ export function ClientsView({ template, clients, projects }: { template: Templat
                     Open full profile →
                   </Link>
                   <ActionForm action={saveClient} submitLabel="Save changes">
-                    <ClientFields client={c} v={v} />
+                    <ClientFields client={c} v={v} teaching={teaching} />
                   </ActionForm>
                   <div className="mt-4 flex justify-end border-t border-line pt-4">
                     <MiniAction

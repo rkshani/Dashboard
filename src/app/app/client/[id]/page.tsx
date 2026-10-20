@@ -11,6 +11,12 @@ import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { idSchema } from "@/lib/data/types";
 import { relativeDay } from "@/lib/dates";
+import { fmtMoney, monthLabel } from "@/lib/money";
+import { addDaysISO } from "@/lib/recurrence";
+import { attendanceRate, FEE_CATEGORY, feeRows, type FeeStatus } from "@/lib/teaching/fees";
+import { recordFee } from "@/app/app/teaching-actions";
+
+const feeLabel: Record<FeeStatus, string> = { paid: "Paid", partial: "Part paid", upcoming: "Not due yet", due: "Due now", overdue: "Overdue" };
 import { getTemplate } from "@/templates";
 
 export const metadata: Metadata = { title: "Client" };
@@ -46,11 +52,19 @@ async function ClientBody({ params }: { params: PageProps<"/app/client/[id]">["p
   const outstanding = myInvoices.filter((i) => i.status === "sent").map((i) => ({ amount: i.total, currency: i.currency }));
   const overdueCount = myInvoices.filter((i) => i.status === "sent" && i.dueDate && i.dueDate < today).length;
   const wa = c.phone ? whatsapp(c.phone) : null;
-  const listLabel = template.modules.find((m) => m.id === "clients")?.label ?? v.clients;
+  const listMod = template.modules.find((m) => m.id === "clients" || m.id === "students");
+  const listLabel = listMod?.label ?? v.clients;
+  const listHref = `/app/${listMod?.id ?? "clients"}`;
+  const teach = listMod?.id === "students";
+  const attendance = teach ? (await repo.listAttendance(addDaysISO(today, -30), today)).filter((a) => a.clientId === c.id) : [];
+  const rate = attendanceRate(attendance).get(c.id);
+  const month = today.slice(0, 7);
+  const feeNow = teach ? feeRows([c], txns, month, today)[0] : undefined;
+  const feeHistory = income.filter((t) => t.category === FEE_CATEGORY).sort((a, b) => b.date.localeCompare(a.date));
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link href="/app/clients" className="text-sm text-accent hover:underline">
+      <Link href={listHref} className="text-sm text-accent hover:underline">
         ← All {listLabel.toLowerCase()}
       </Link>
       <header className="anim-rise mt-4 flex flex-wrap items-start justify-between gap-4">
@@ -81,15 +95,74 @@ async function ClientBody({ params }: { params: PageProps<"/app/client/[id]">["p
         </div>
       )}
 
+      {teach ? (
+        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label={v.project} value={c.classId ? (projects.find((p) => p.id === c.classId)?.title ?? "—") : "Not set"} />
+          <Stat label="Monthly fee" value={c.monthlyFee ? fmtMoney(c.monthlyFee, currency) : "Not set"} />
+          <Stat label={`Fee for ${monthLabel(month, "short")}`} value={feeNow ? feeLabel[feeNow.status] : "—"} tone={feeNow?.status === "paid" ? "good" : feeNow?.status === "overdue" ? "warn" : undefined} />
+          <Stat label="Attendance, 30 days" value={rate ? `${Math.round((rate.present / rate.total) * 100)}% · ${rate.present}/${rate.total}` : "No marks yet"} tone={rate && rate.present / rate.total < 0.75 ? "warn" : undefined} />
+        </div>
+      ) : (
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label={v.projects} value={String(myProjects.length)} />
         <Stat label="Billed" value={sumByCurrency(billed, currency)} />
         <Stat label="Received" value={sumByCurrency(income, currency)} tone="good" />
         <Stat label={overdueCount ? `Outstanding · ${overdueCount} overdue` : "Outstanding"} value={sumByCurrency(outstanding, currency)} tone={outstanding.length ? "warn" : undefined} />
       </div>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="flex min-w-0 flex-col gap-6">
+          {teach && (
+            <>
+              <Panel
+                title="Fees paid"
+                action={
+                  feeNow && feeNow.status !== "paid" ? (
+                    <MiniAction action={recordFee} fields={{ id: c.id, month }} className="h-9 cursor-pointer rounded-lg border border-good/40 px-3 text-xs font-medium text-good hover:bg-surface-2">
+                      Mark {monthLabel(month, "short")} paid
+                    </MiniAction>
+                  ) : undefined
+                }
+              >
+                {feeHistory.length ? (
+                  <ul className="divide-y divide-line">
+                    {feeHistory.slice(0, 12).map((t) => (
+                      <li key={t.id} className="flex items-center gap-3 py-2 text-sm">
+                        <span className="text-xs text-muted">{t.date}</span>
+                        <span className="min-w-0 flex-1 truncate">{t.note || "Fee"}</span>
+                        <span className="tabular-nums text-good">{fmtMoney(t.amount, t.currency)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted">No fees recorded yet.</p>
+                )}
+              </Panel>
+              <Panel
+                title="Attendance, last 30 days"
+                action={
+                  <Link href={`/app/attendance${c.classId ? `?class=${c.classId}` : ""}`} className="text-xs text-accent hover:underline">
+                    Take attendance
+                  </Link>
+                }
+              >
+                {attendance.length ? (
+                  <ul className="flex flex-wrap gap-1.5" aria-label="Attendance by day">
+                    {[...attendance].sort((a, b) => a.date.localeCompare(b.date)).map((a) => (
+                      <li key={a.date} title={`${a.date}: ${a.status}`} className={`flex h-8 min-w-8 items-center justify-center rounded-lg px-1.5 text-[11px] font-semibold ${a.status === "present" ? "bg-good/15 text-good" : a.status === "late" ? "bg-accent/15 text-accent" : "bg-warn/15 text-warn"}`}>
+                        {a.date.slice(8)}
+                        <span className="sr-only"> {a.status}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted">No attendance marked in the last 30 days.</p>
+                )}
+              </Panel>
+            </>
+          )}
+          {!teach && (
           <Panel title={v.projects}>
             {myProjects.length ? (
               <ul className="flex flex-col gap-2">
@@ -119,6 +192,7 @@ async function ClientBody({ params }: { params: PageProps<"/app/client/[id]">["p
               <p className="text-sm text-muted">No {v.projects.toLowerCase()} for {c.name} yet.</p>
             )}
           </Panel>
+          )}
           <Panel
             title="Invoices"
             action={
@@ -138,12 +212,12 @@ async function ClientBody({ params }: { params: PageProps<"/app/client/[id]">["p
           )}
           <Panel title={`Edit ${v.client.toLowerCase()}`}>
             <ActionForm action={saveClient} submitLabel="Save changes">
-              <ClientFields client={c} v={v} />
+              <ClientFields client={c} v={v} teaching={teach ? { classes: projects.filter((p) => p.status !== "done" || p.id === c.classId).map((p) => ({ id: p.id, title: p.title })), currency } : undefined} />
             </ActionForm>
             <div className="mt-4 flex justify-end border-t border-line pt-4">
               <MiniAction
                 action={deleteClient}
-                fields={{ id: c.id, then: "/app/clients" }}
+                fields={{ id: c.id, then: listHref }}
                 confirm={`Delete ${c.name}? Their ${v.projects.toLowerCase()} and invoices stay but will no longer be linked.`}
                 className="h-9 cursor-pointer rounded-lg px-3 text-xs text-warn hover:bg-surface-2"
               >

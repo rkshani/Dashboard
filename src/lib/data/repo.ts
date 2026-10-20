@@ -1,4 +1,4 @@
-import type { BusinessProfile, Client, NewRecurring, RecurringTxn, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { AttendanceEntry, ContentInput, ContentPost, ContentStatus, SlotInput, TimetableSlot, BusinessProfile, Client, NewRecurring, RecurringTxn, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
@@ -59,6 +59,21 @@ export interface Repo {
 
   getBusinessProfile(): Promise<BusinessProfile>;
   saveBusinessProfile(b: BusinessProfile): Promise<void>;
+
+  /** Attendance between two dates (inclusive). */
+  listAttendance(from: string, to: string): Promise<AttendanceEntry[]>;
+  /** Replaces the marks for these students on `date`. */
+  saveAttendance(date: string, classId: string | null, marks: { clientId: string; status: AttendanceEntry["status"] }[]): Promise<void>;
+
+  listSlots(): Promise<TimetableSlot[]>;
+  createSlot(input: SlotInput): Promise<TimetableSlot>;
+  deleteSlot(id: string): Promise<void>;
+
+  listContent(): Promise<ContentPost[]>;
+  createContent(input: ContentInput): Promise<ContentPost>;
+  updateContent(id: string, input: ContentInput): Promise<void>;
+  setContentStatus(id: string, status: ContentStatus): Promise<void>;
+  deleteContent(id: string): Promise<void>;
 
   getProposal(postingId: string): Promise<Proposal | null>;
   saveProposal(postingId: string, body: string, source: Proposal["source"]): Promise<void>;
