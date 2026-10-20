@@ -49,6 +49,8 @@ Each step is marked **[You]** (needs your accounts or a decision) or **[AI]** (a
    - `/api/cron/collect` every 6 hours.
 
    So use **Vercel Pro**, or keep Hobby and call both URLs from an external scheduler (for example cron-job.org) with the header `Authorization: Bearer <CRON_SECRET>`.
+
+   **Decision (20 Oct 2026): Hobby + cron-job.org.** `vercel.json` now runs both jobs once a day, which Hobby allows, as a backup. Set up cron-job.org for the real schedule: `/api/cron/automations` every hour and `/api/cron/collect` every 6 hours. Running a job twice is harmless, because every action is logged once. When you move to Pro, set `vercel.json` back to `0 * * * *` and `15 */6 * * *`.
 3. Add every variable from section 1.7 in **Settings → Environment Variables**, for Production.
 
 ### 1.3 Upstash Redis (shared rate limiting)
