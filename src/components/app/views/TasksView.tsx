@@ -1,4 +1,4 @@
-import { addTask, deleteTask, toggleTask } from "@/app/app/work-actions";
+import { addTask, deleteTask, toggleTask, updateTask } from "@/app/app/work-actions";
 import { ActionForm, DoneCheckbox, MiniAction } from "@/components/app/forms";
 import { inputCls, labelCls } from "@/components/app/styles";
 import { Icon } from "@/components/Sections";
@@ -9,10 +9,10 @@ import type { Template } from "@/templates";
 const prioTone: Record<Priority, string> = { high: "bg-warn/15 text-warn", normal: "bg-surface-2 text-muted", low: "bg-surface-2 text-muted" };
 const prioRank: Record<Priority, number> = { high: 0, normal: 1, low: 2 };
 
-function TaskRow({ t, project, today }: { t: Task; project?: Project; today: string }) {
+function TaskRow({ t, project, today, projects, projectLabel }: { t: Task; project?: Project; today: string; projects: Project[]; projectLabel: string }) {
   const overdue = !t.done && t.dueDate && daysBetween(today, t.dueDate) < 0;
   return (
-    <li className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface-2">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface-2">
       <DoneCheckbox action={toggleTask} id={t.id} done={t.done} title={t.title} />
       <div className="min-w-0 flex-1">
         <p className={`truncate text-sm ${t.done ? "text-muted line-through" : "font-medium"}`}>{t.title}</p>
@@ -21,6 +21,50 @@ function TaskRow({ t, project, today }: { t: Task; project?: Project; today: str
         </p>
       </div>
       {t.priority !== "normal" && !t.done && <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${prioTone[t.priority]}`}>{t.priority}</span>}
+      <details className="group order-last basis-full open:mt-1 [&:not([open])]:order-none [&:not([open])]:basis-auto">
+        <summary className="flex h-9 min-w-9 cursor-pointer list-none items-center justify-center rounded-lg px-2 text-xs text-muted hover:bg-surface-2 hover:text-ink group-open:mb-2 group-open:w-fit" aria-label={`Edit "${t.title}"`}>
+          <Icon name="edit" className="h-4 w-4 group-open:hidden" />
+          <span className="hidden group-open:inline">Close editor</span>
+        </summary>
+        <div className="rounded-xl border border-line bg-bg p-3">
+          <ActionForm action={updateTask} submitLabel="Save">
+            <input type="hidden" name="id" value={t.id} />
+            <label className="flex flex-col gap-1.5">
+              <span className={labelCls}>Task</span>
+              <input name="title" required maxLength={200} defaultValue={t.title} className={inputCls} />
+            </label>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="flex flex-col gap-1.5">
+                <span className={labelCls}>Due</span>
+                <input name="dueDate" type="date" defaultValue={t.dueDate ?? ""} className={inputCls} />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className={labelCls}>Priority</span>
+                <select name="priority" defaultValue={t.priority} className={inputCls}>
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>
+                      {p[0].toUpperCase() + p.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className={labelCls}>{projectLabel}</span>
+                <select name="projectId" defaultValue={t.projectId ?? ""} className={inputCls}>
+                  <option value="">None</option>
+                  {projects
+                    .filter((p) => p.status !== "done" || p.id === t.projectId)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+          </ActionForm>
+        </div>
+      </details>
       <MiniAction action={deleteTask} fields={{ id: t.id }} label={`Delete "${t.title}"`}>
         <Icon name="close" className="h-4 w-4" />
       </MiniAction>
@@ -101,7 +145,7 @@ export function TasksView({ template, tasks, projects, today }: { template: Temp
             </h2>
             <ul className="rounded-2xl border border-line bg-surface p-1.5">
               {g.items.map((t) => (
-                <TaskRow key={t.id} t={t} project={t.projectId ? projectById.get(t.projectId) : undefined} today={today} />
+                <TaskRow key={t.id} t={t} project={t.projectId ? projectById.get(t.projectId) : undefined} today={today} projects={projects} projectLabel={v.project} />
               ))}
             </ul>
           </section>
@@ -114,7 +158,7 @@ export function TasksView({ template, tasks, projects, today }: { template: Temp
           </summary>
           <ul className="mt-2 rounded-2xl border border-line bg-surface p-1.5">
             {done.map((t) => (
-              <TaskRow key={t.id} t={t} project={t.projectId ? projectById.get(t.projectId) : undefined} today={today} />
+              <TaskRow key={t.id} t={t} project={t.projectId ? projectById.get(t.projectId) : undefined} today={today} projects={projects} projectLabel={v.project} />
             ))}
           </ul>
         </details>

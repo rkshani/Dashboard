@@ -12,5 +12,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: r.status === "launching" ? 0.9 : 0.6,
     })),
     { url: `${site.url}/privacy`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
+    { url: `${site.url}/terms`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
   ];
 }

@@ -65,6 +65,7 @@ export function SiteFooter() {
           <h2 className="text-sm font-semibold">Company</h2>
           <ul className="mt-3 space-y-2 text-sm text-muted">
             <li><Link href="/privacy" className="hover:text-ink">Privacy</Link></li>
+            <li><Link href="/terms" className="hover:text-ink">Terms</Link></li>
             <li><a href={`mailto:${site.contactEmail}`} className="hover:text-ink">Contact</a></li>
           </ul>
         </div>

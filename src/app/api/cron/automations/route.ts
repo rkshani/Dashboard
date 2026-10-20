@@ -7,6 +7,7 @@ import { todayIn } from "@/lib/dates";
 import { emailConfigured, sendEmail } from "@/lib/email";
 import { rowToProfile, type ProfileRow } from "@/lib/profile";
 import { getTemplate } from "@/templates";
+import { recordJobRun } from "@/lib/jobs";
 
 /**
  * Hourly job: for every onboarded user, run their automation rules, and once it is at or past their
@@ -64,5 +65,10 @@ export async function GET(req: Request) {
       console.error("[automations] user run failed:", e instanceof Error ? e.message : e);
     }
   }
+  await recordJobRun(db, "automations", {
+    ok: stats.failures === 0 || stats.failures < stats.users,
+    error: stats.failures ? `${stats.failures} of ${stats.users} users failed` : undefined,
+    details: stats,
+  });
   return Response.json(stats);
 }

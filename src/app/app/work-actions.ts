@@ -93,6 +93,15 @@ export async function addTask(_prev: FormState, fd: FormData): Promise<FormState
   return run(async () => void (await repo.createTask(parsed.data)), "Task added.");
 }
 
+export async function updateTask(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idSchema.safeParse(fd.get("id"));
+  if (!id.success) return fail("Invalid id.");
+  const parsed = taskInput.safeParse(fields(fd, ["title", "projectId", "dueDate", "priority"]));
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const { repo } = await getRepo();
+  return run(() => repo.updateTask(id.data, parsed.data), "Saved.");
+}
+
 export async function toggleTask(fd: FormData) {
   const parsed = z.object({ id: idSchema, done: z.enum(["true", "false"]) }).safeParse({ id: fd.get("id"), done: fd.get("done") });
   if (!parsed.success) return;

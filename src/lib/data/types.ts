@@ -189,3 +189,33 @@ export type InvoiceInput = z.output<typeof invoiceInput>;
 export function invoiceTotal(items: InvoiceItem[]) {
   return Math.round(items.reduce((s, i) => s + i.quantity * i.rate, 0) * 100) / 100;
 }
+
+// ---------------- Business details (shown on invoices) ----------------
+
+export type BusinessProfile = {
+  businessName: string | null;
+  address: string | null;
+  taxId: string | null;
+  contactEmail: string | null;
+  phone: string | null;
+  paymentDetails: string | null;
+  defaultDueDays: number;
+};
+
+export const EMPTY_BUSINESS: BusinessProfile = { businessName: null, address: null, taxId: null, contactEmail: null, phone: null, paymentDetails: null, defaultDueDays: 14 };
+
+export const businessInput = z.object({
+  businessName: optText(120),
+  address: optText(500),
+  taxId: optText(60),
+  contactEmail: z
+    .string()
+    .trim()
+    .max(254)
+    .optional()
+    .transform((v) => (v ? v.toLowerCase() : null))
+    .refine((v) => v === null || z.string().email().safeParse(v).success, "Enter a valid email."),
+  phone: optText(40),
+  paymentDetails: optText(1000),
+  defaultDueDays: z.coerce.number().int().min(0).max(120).default(14),
+});

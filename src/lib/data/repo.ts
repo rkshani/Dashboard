@@ -1,4 +1,4 @@
-import type { Client, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { BusinessProfile, Client, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import type { AutomationLogEntry, AutomationSettings, Integration } from "@/lib/automations/types";
@@ -24,6 +24,7 @@ export interface Repo {
 
   listTasks(): Promise<Task[]>;
   createTask(input: TaskInput): Promise<Task>;
+  updateTask(id: string, input: TaskInput): Promise<void>;
   setTaskDone(id: string, done: boolean): Promise<void>;
   deleteTask(id: string): Promise<void>;
 
@@ -49,6 +50,9 @@ export interface Repo {
   listAutomationLog(limit?: number): Promise<AutomationLogEntry[]>;
   /** Records that a rule acted on `key`. Returns false if it already had (so rules never repeat). */
   logAutomation(ruleId: string, key: string, message: string): Promise<boolean>;
+
+  getBusinessProfile(): Promise<BusinessProfile>;
+  saveBusinessProfile(b: BusinessProfile): Promise<void>;
 
   getIntegration(provider: "google"): Promise<Integration | null>;
   saveIntegration(i: Omit<Integration, "connectedAt">): Promise<void>;

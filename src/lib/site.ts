@@ -94,6 +94,6 @@ export const faqs: { q: string; a: string }[] = [
   },
   {
     q: "How much will it cost?",
-    a: "There will be a free plan and an affordable Pro plan with regional pricing. People on the waitlist get early-bird pricing.",
+    a: "Everything, including Pro, is free during the beta. After the beta there will be a free plan and an affordable Pro plan with regional pricing, and people from the waitlist get early-bird pricing.",
   },
 ];

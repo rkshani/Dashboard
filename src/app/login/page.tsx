@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Logo } from "@/components/SiteChrome";
 import { EmailLoginForm } from "@/components/auth/EmailLoginForm";
 import { signInWithGoogle, startDemo } from "@/app/auth-actions";
@@ -29,6 +30,9 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
         <Suspense fallback={<div className="mt-8 h-64 animate-pulse rounded-2xl bg-surface-2" />}>
           <LoginBody searchParams={searchParams} />
         </Suspense>
+        <p className="mt-6 text-xs text-muted">
+          By continuing you agree to the <Link href="/terms" className="underline hover:text-ink">Terms</Link> and <Link href="/privacy" className="underline hover:text-ink">Privacy</Link> policy.
+        </p>
       </div>
     </main>
   );

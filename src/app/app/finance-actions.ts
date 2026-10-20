@@ -4,7 +4,12 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { getRepo } from "@/lib/data";
 import { NotFoundError } from "@/lib/data/repo";
-import { idSchema, INVOICE_STATUSES, invoiceInput, invoiceTotal, transactionInput, type FormState } from "@/lib/data/types";
+import { businessInput, idSchema, INVOICE_STATUSES, invoiceInput, invoiceTotal, transactionInput, type FormState } from "@/lib/data/types";
+import { requireProfile } from "@/lib/auth";
+import { emailConfigured, sendEmail } from "@/lib/email";
+import { renderInvoiceEmail } from "@/lib/invoices/email";
+import { fmtMoney } from "@/lib/money";
+import { rateLimit } from "@/lib/rate-limit";
 
 const ok = (message: string): FormState => ({ status: "success", message, at: Date.now() });
 const fail = (message: string): FormState => ({ status: "error", message, at: Date.now() });
@@ -97,4 +102,49 @@ export async function deleteInvoice(fd: FormData) {
   if (!id.success) return;
   const { repo } = await getRepo();
   await run(() => repo.deleteInvoice(id.data), "Deleted.");
+}
+
+export async function saveBusinessProfile(_prev: FormState, fd: FormData): Promise<FormState> {
+  const parsed = businessInput.safeParse({
+    businessName: get(fd, "businessName"),
+    address: get(fd, "address"),
+    taxId: get(fd, "taxId"),
+    contactEmail: get(fd, "contactEmail"),
+    phone: get(fd, "phone"),
+    paymentDetails: get(fd, "paymentDetails"),
+    defaultDueDays: get(fd, "defaultDueDays") ?? 14,
+  });
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const { repo } = await getRepo();
+  return run(() => repo.saveBusinessProfile(parsed.data), "Invoice details saved.");
+}
+
+const sendInput = z.object({ id: idSchema, message: z.string().trim().max(1000).optional() });
+
+/** Emails the invoice to the client's address; replies go to you. Marks a draft as sent. */
+export async function sendInvoiceToClient(_prev: FormState, fd: FormData): Promise<FormState> {
+  const parsed = sendInput.safeParse({ id: fd.get("id"), message: fd.get("message") ?? undefined });
+  if (!parsed.success) return fail("Invalid request.");
+  const { repo, today, userId, demo } = await getRepo();
+  const { user, profile } = await requireProfile();
+  if (demo) return fail("Emails can't be sent in demo mode. Use Print / save as PDF instead.");
+  if (!emailConfigured()) return fail("Email sending isn't set up on this server yet.");
+  if (!rateLimit(`invoice-email:${userId}`, 10, 60 * 60_000)) return fail("You've sent a lot of invoices this hour. Try again later.");
+
+  const [invoices, clients, business] = await Promise.all([repo.listInvoices(), repo.listClients(), repo.getBusinessProfile()]);
+  const inv = invoices.find((i) => i.id === parsed.data.id);
+  if (!inv) return fail("That invoice no longer exists.");
+  const client = inv.clientId ? clients.find((c) => c.id === inv.clientId) : undefined;
+  if (!client?.email) return fail("Add an email address to this client first.");
+
+  const { subject, html, text } = renderInvoiceEmail({ invoice: inv, client, business, senderName: profile.displayName, money: fmtMoney, message: parsed.data.message || null });
+  try {
+    await sendEmail({ to: client.email, subject, html, text, replyTo: business.contactEmail ?? user.email });
+  } catch (e) {
+    console.error("[invoice] send failed:", e instanceof Error ? e.message : e);
+    return fail("Couldn't send the email. Please try again.");
+  }
+  if (inv.status === "draft") await repo.setInvoiceStatus(inv.id, "sent", today);
+  refresh();
+  return ok(`Sent to ${client.email}.`);
 }

@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { setInvoiceStatus } from "@/app/app/finance-actions";
+import { sendInvoiceToClient, setInvoiceStatus } from "@/app/app/finance-actions";
 import { InvoiceBuilder } from "@/components/app/InvoiceBuilder";
-import { MiniAction } from "@/components/app/forms";
+import { ActionForm, MiniAction } from "@/components/app/forms";
+import { inputCls, labelCls } from "@/components/app/styles";
+import { emailConfigured } from "@/lib/email";
 import { PrintButton } from "@/components/app/PrintButton";
 import { invoiceBadge } from "@/components/app/views/InvoicesView";
 import { requireProfile } from "@/lib/auth";
@@ -33,7 +35,7 @@ async function InvoiceBody({ params }: { params: PageProps<"/app/invoice/[id]">[
   const { user, profile } = await requireProfile();
   const template = getTemplate(profile.templateId);
   const { repo, today } = await getRepo();
-  const [invoices, clients, projects] = await Promise.all([repo.listInvoices(), repo.listClients(), repo.listProjects()]);
+  const [invoices, clients, projects, business] = await Promise.all([repo.listInvoices(), repo.listClients(), repo.listProjects(), repo.getBusinessProfile()]);
   const inv = invoices.find((i) => i.id === id);
   if (!inv) notFound();
   const client = inv.clientId ? clients.find((c) => c.id === inv.clientId) : undefined;
@@ -69,8 +71,11 @@ async function InvoiceBody({ params }: { params: PageProps<"/app/invoice/[id]">[
         <div className="mt-10 grid gap-8 sm:grid-cols-2">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted">From</p>
-            <p className="mt-2 font-medium">{profile.displayName}</p>
-            {!user.demo && <p className="text-sm text-muted">{user.email}</p>}
+            <p className="mt-2 font-medium">{business.businessName || profile.displayName}</p>
+            {business.address && <p className="whitespace-pre-line text-sm text-muted">{business.address}</p>}
+            {business.taxId && <p className="text-sm text-muted">Tax ID: {business.taxId}</p>}
+            {(business.contactEmail || !user.demo) && <p className="text-sm text-muted">{business.contactEmail ?? user.email}</p>}
+            {business.phone && <p className="text-sm text-muted">{business.phone}</p>}
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted">Bill to</p>
@@ -117,8 +122,42 @@ async function InvoiceBody({ params }: { params: PageProps<"/app/invoice/[id]">[
           </tfoot>
         </table>
 
-        {inv.notes && <p className="mt-10 whitespace-pre-line border-t border-line pt-6 text-sm text-muted">{inv.notes}</p>}
+        {business.paymentDetails && (
+          <div className="mt-10 rounded-2xl bg-surface-2 p-5">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted">How to pay</p>
+            <p className="mt-2 whitespace-pre-line text-sm">{business.paymentDetails}</p>
+          </div>
+        )}
+        {inv.notes && <p className="mt-8 whitespace-pre-line border-t border-line pt-6 text-sm text-muted">{inv.notes}</p>}
       </article>
+
+      {!business.paymentDetails && (
+        <p className="no-print mt-4 text-sm text-muted">
+          Tip: add your payment details and business address in <Link href="/app/settings" className="text-accent underline">Settings</Link> so they print on every invoice.
+        </p>
+      )}
+
+      <section aria-label="Email to client" className="no-print mt-6 rounded-2xl border border-line bg-surface p-5">
+        <h2 className="font-display text-lg font-semibold">Email to {client?.name ?? "client"}</h2>
+        {user.demo ? (
+          <p className="mt-1 text-sm text-muted">Demo mode: emails aren&apos;t sent. Use Print / save as PDF to share it.</p>
+        ) : !client?.email ? (
+          <p className="mt-1 text-sm text-muted">
+            {client ? <>Add an email address to {client.name} on the <Link href="/app/clients" className="text-accent underline">{template.vocabulary.clients}</Link> page first.</> : `Pick a ${template.vocabulary.client.toLowerCase()} for this invoice first.`}
+          </p>
+        ) : !emailConfigured() ? (
+          <p className="mt-1 text-sm text-warn">Email sending isn&apos;t set up on this server yet.</p>
+        ) : (
+          <ActionForm action={sendInvoiceToClient} submitLabel={inv.status === "draft" ? `Send to ${client.email}` : `Send again to ${client.email}`} className="mt-3">
+            <input type="hidden" name="id" value={inv.id} />
+            <label className="flex flex-col gap-1.5">
+              <span className={labelCls}>Message (optional)</span>
+              <textarea name="message" maxLength={1000} rows={3} placeholder={`Hi ${client.name.split(" ")[0]}, please find invoice ${inv.number} below. Thank you!`} className={`${inputCls} h-auto py-2`} />
+            </label>
+            <p className="mt-2 text-xs text-muted">Replies go to {business.contactEmail ?? user.email}. A draft is marked as sent.</p>
+          </ActionForm>
+        )}
+      </section>
 
       {inv.status !== "paid" && (
         <details className="no-print mt-6 rounded-2xl border border-line bg-surface open:border-accent">

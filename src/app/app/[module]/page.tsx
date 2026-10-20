@@ -8,6 +8,7 @@ import { TasksView } from "@/components/app/views/TasksView";
 import { FinanceView } from "@/components/app/views/FinanceView";
 import { InvoicesView } from "@/components/app/views/InvoicesView";
 import { monthKey } from "@/lib/money";
+import { addDays } from "@/lib/dates";
 import { OpportunitiesView } from "@/components/app/views/OpportunitiesView";
 import { getFeed } from "@/lib/opportunities/feed";
 import { CalendarView } from "@/components/app/views/CalendarView";
@@ -121,7 +122,10 @@ async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module
   if (mod.id === "finance" || mod.id === "invoices") {
     const { repo, today, currency } = await getRepo();
     const [clients, projects, transactions, invoices] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTransactions(), repo.listInvoices()]);
-    if (mod.id === "invoices") return <InvoicesView template={template} invoices={invoices} clients={clients} projects={projects} today={today} currency={currency} />;
+    if (mod.id === "invoices") {
+      const business = await repo.getBusinessProfile();
+      return <InvoicesView template={template} invoices={invoices} clients={clients} projects={projects} today={today} currency={currency} defaultDueDate={business.defaultDueDays ? addDays(today, business.defaultDueDays) : today} />;
+    }
     const sp = await searchParams;
     const current = monthKey(today);
     const m = typeof sp.m === "string" && /^\d{4}-\d{2}$/.test(sp.m) && sp.m <= current ? sp.m : current;

@@ -29,7 +29,7 @@ demo session (seeded with examples; restarting the server resets them).
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0006`).
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0007`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -66,6 +66,9 @@ demo session (seeded with examples; restarting the server resets them).
 | Automation rules engine, digest builder, email | `src/lib/automations/`, `src/lib/email.ts` |
 | Automations page, digest preview | `src/components/app/views/AutomationsView.tsx`, `src/app/app/digest-preview/` |
 | Hourly automations + digest job | `src/app/api/cron/automations/route.ts` |
+| Invoice details (settings), invoice email to clients | `src/app/app/settings/page.tsx`, `src/lib/invoices/email.ts`, `src/app/app/finance-actions.ts` |
+| Terms of service | `src/app/(marketing)/terms/page.tsx` |
+| Error reporting, alerts, job heartbeats, health check | `src/instrumentation.ts`, `src/lib/monitoring.ts`, `src/lib/jobs.ts`, `src/app/api/health/`, `src/app/api/client-error/` |
 | Unit tests (`npm test`) | `tests/` |
 | Database migrations | `supabase/migrations/` |
 
@@ -106,7 +109,10 @@ a filterable feed and a pipeline (demo mode uses an example feed from fictional 
 **Google Calendar sync** (connect, agenda, create events, meetings on Today and in the digest) and
 **automations** (rule toggles, run now, activity log, daily email digest with preview) are live.
 
-Next ideas: AI-drafted proposals for saved opportunities; Gmail summary; Flutter mobile app.
+Before-beta set done: task editing, invoice business details and emailing invoices, Terms of
+service, and error monitoring with uptime checks. Pro is free during the beta.
+
+Next ideas: project and client detail pages; search; notifications; AI-drafted proposals.
 
 ### Opportunity engine
 
@@ -167,6 +173,24 @@ key, and every query goes through the owner-scoped repository. Email goes throug
 (`RESEND_API_KEY`, `DIGEST_FROM_EMAIL` on a verified domain). Users can preview the digest in the app and
 send themselves a test. Hourly cron needs a Vercel plan that allows it; otherwise call the endpoint
 from any scheduler with the `CRON_SECRET` header.
+
+### Monitoring
+
+- **Errors:** every server error (pages, actions, route handlers) and every error screen a user sees
+  is logged as one JSON line. Set `ALERT_WEBHOOK_URL` (a Slack or Discord incoming webhook) to also
+  get an alert; alerts are throttled (same error at most every 10 minutes, 20 an hour) and never
+  include cookies, headers, query strings or ids.
+- **Scheduled jobs:** each run writes a heartbeat to `job_runs`; a failed run sends an alert.
+- **Uptime:** point an uptime monitor (UptimeRobot, Better Stack, …) at `/api/health`. It returns 200
+  when the database answers and both jobs succeeded recently (collector within 13 h, automations
+  within 2 h), otherwise 503. Until each job has run once it reports 503.
+
+### Invoices
+
+Business name, address, tax ID, reply-to email, phone, payment details and default payment terms are
+set once in **Settings → Invoice details** and printed on every invoice. **Email to client** on an
+invoice sends it from your configured sender (`DIGEST_FROM_EMAIL`) with replies going to you; a draft
+becomes "sent". Limited to 10 a user per hour.
 
 ## Deploy
 

@@ -1,9 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 
 /** Friendly error screen for the signed-in app (database or network hiccups). */
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => {
+    // Report once; the server already logged server-side errors under the same digest.
+    fetch("/api/client-error", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: error.message.slice(0, 300), digest: error.digest, path: window.location.pathname }),
+      keepalive: true,
+    }).catch(() => undefined);
+  }, [error]);
+
   return (
     <div className="mx-auto max-w-lg py-16 text-center">
       <p className="font-mono text-sm text-warn">Something went wrong</p>

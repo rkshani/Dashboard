@@ -5,6 +5,7 @@ import { demoPostings } from "@/lib/opportunities/fixtures";
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationLogEntry, type AutomationSettings } from "@/lib/automations/types";
 import type { CalEvent, NewEvent } from "@/lib/calendar/types";
+import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
 import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 /**
@@ -12,7 +13,7 @@ import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput
  * It lives in the server process: restarting the server resets it.
  * Capped so a public demo can't be used to fill memory.
  */
-type Store = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; touched: number };
+type Store = { clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
 const LIMIT = { sessions: 500, clients: 200, projects: 200, tasks: 1000, transactions: 2000, invoices: 300 };
 
 const g = globalThis as unknown as { __dashDemo?: Map<string, Store> };
@@ -32,6 +33,7 @@ function seed(today: string, currency: string, tzOffset: number): Store {
   return {
     touched: Date.now(),
     oppStatus: {},
+    business: { ...EMPTY_BUSINESS },
     settings: { ...DEFAULT_SETTINGS },
     log: [],
     events: demoEvents(today, tzOffset),
@@ -82,6 +84,7 @@ function getStore(sessionId: string, today: string, currency: string, tzOffset: 
   s.transactions ??= [];
   s.invoices ??= [];
   s.oppStatus ??= {};
+  s.business ??= { ...EMPTY_BUSINESS };
   s.settings ??= { ...DEFAULT_SETTINGS };
   s.log ??= [];
   s.events ??= demoEvents(today, tzOffset);
@@ -173,6 +176,12 @@ export class DemoRepo implements Repo {
     const t: Task = { id: randomUUID(), ...i, done: false, doneAt: null, createdAt: new Date().toISOString() };
     this.s.tasks.unshift(t);
     return t;
+  }
+  async updateTask(id: string, i: TaskInput) {
+    const t = this.s.tasks.find((x) => x.id === id);
+    if (!t) throw new NotFoundError();
+    if (i.projectId && !this.s.projects.some((p) => p.id === i.projectId)) throw new NotFoundError();
+    Object.assign(t, { title: i.title, projectId: i.projectId, dueDate: i.dueDate, priority: i.priority });
   }
   async setTaskDone(id: string, done: boolean) {
     const t = this.s.tasks.find((x) => x.id === id);
@@ -267,6 +276,13 @@ export class DemoRepo implements Repo {
     this.s.log.unshift({ id: randomUUID(), ruleId, key, message, createdAt: new Date().toISOString() });
     this.s.log = this.s.log.slice(0, 500);
     return true;
+  }
+
+  async getBusinessProfile() {
+    return { ...this.s.business };
+  }
+  async saveBusinessProfile(b: BusinessProfile) {
+    this.s.business = { ...b };
   }
 
   // Google isn't available in demo mode; the calendar uses demo events instead.

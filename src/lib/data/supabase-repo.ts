@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { NotFoundError, type NewInvoice, type Repo } from "./repo";
 import type { PipelineStatus, Posting, SourceId } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationSettings } from "@/lib/automations/types";
+import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
 import type { Client, ClientInput, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 type ClientRow = { id: string; name: string; company: string | null; email: string | null; phone: string | null; status: Client["status"]; notes: string | null; created_at: string };
@@ -146,6 +147,16 @@ export class SupabaseRepo implements Repo {
     check(error);
     return toTask(data!);
   }
+  async updateTask(id: string, i: TaskInput) {
+    const { data, error } = await this.db
+      .from("tasks")
+      .update({ title: i.title, project_id: i.projectId, due_date: i.dueDate, priority: i.priority })
+      .eq("owner_id", this.owner)
+      .eq("id", id)
+      .select("id");
+    check(error);
+    if (!data?.length) throw new NotFoundError();
+  }
   async setTaskDone(id: string, done: boolean) {
     const { error } = await this.db.from("tasks").update({ done, done_at: done ? new Date().toISOString() : null }).eq("owner_id", this.owner).eq("id", id);
     check(error);
@@ -288,6 +299,40 @@ export class SupabaseRepo implements Repo {
     if (error?.code === "23505") return false; // already done
     check(error);
     return true;
+  }
+
+  // ---------------- Business details ----------------
+
+  async getBusinessProfile(): Promise<BusinessProfile> {
+    const { data, error } = await this.db.from("business_profiles").select("*").eq("owner_id", this.owner).maybeSingle();
+    check(error);
+    if (!data) return { ...EMPTY_BUSINESS };
+    return {
+      businessName: data.business_name,
+      address: data.address,
+      taxId: data.tax_id,
+      contactEmail: data.contact_email,
+      phone: data.phone,
+      paymentDetails: data.payment_details,
+      defaultDueDays: Number(data.default_due_days ?? 14),
+    };
+  }
+  async saveBusinessProfile(b: BusinessProfile) {
+    const { error } = await this.db.from("business_profiles").upsert(
+      {
+        owner_id: this.owner,
+        business_name: b.businessName,
+        address: b.address,
+        tax_id: b.taxId,
+        contact_email: b.contactEmail,
+        phone: b.phone,
+        payment_details: b.paymentDetails,
+        default_due_days: b.defaultDueDays,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "owner_id" },
+    );
+    check(error);
   }
 
   // ---------------- Integrations ----------------

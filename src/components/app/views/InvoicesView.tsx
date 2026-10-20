@@ -24,6 +24,7 @@ export function InvoicesView({
   projects,
   today,
   currency,
+  defaultDueDate,
 }: {
   template: Template;
   invoices: Invoice[];
@@ -31,6 +32,7 @@ export function InvoicesView({
   projects: Project[];
   today: string;
   currency: string;
+  defaultDueDate: string | null;
 }) {
   const v = template.vocabulary;
   const clientName = new Map(clients.map((c) => [c.id, c.name]));
@@ -56,6 +58,7 @@ export function InvoicesView({
             projects={projects.map((p) => ({ id: p.id, title: p.title, clientId: p.clientId }))}
             today={today}
             currency={currency}
+            defaultDueDate={defaultDueDate}
             clientLabel={v.client}
             projectLabel={v.project}
           />

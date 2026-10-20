@@ -18,9 +18,11 @@ export function InvoiceBuilder({
   projects,
   today,
   currency,
+  defaultDueDate = null,
   clientLabel,
   projectLabel,
 }: {
+  defaultDueDate?: string | null;
   invoice?: Invoice;
   clients: { id: string; name: string }[];
   projects: { id: string; title: string; clientId: string | null }[];
@@ -82,7 +84,7 @@ export function InvoiceBuilder({
         </label>
         <label className="flex flex-col gap-1.5">
           <span className={labelCls}>Due date</span>
-          <input name="dueDate" type="date" defaultValue={invoice?.dueDate ?? ""} className={inputCls} />
+          <input name="dueDate" type="date" defaultValue={invoice ? (invoice.dueDate ?? "") : (defaultDueDate ?? "")} className={inputCls} />
         </label>
       </div>
 

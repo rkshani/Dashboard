@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { collectAll } from "@/lib/opportunities/sources";
+import { recordJobRun } from "@/lib/jobs";
 
 /**
  * Scheduled collector. Vercel Cron calls it every 6 hours (see vercel.json) with
@@ -62,5 +63,12 @@ export async function GET(req: Request) {
     }
   }
 
+  const failed = report.filter((r) => !r.ok);
+  const ok = upserted > 0 || failed.length < report.length; // at least one source worked
+  await recordJobRun(db, "collect", {
+    ok,
+    error: ok ? undefined : `All sources failed: ${failed.map((f) => `${f.id} (${f.error})`).join(", ")}`,
+    details: { upserted, removed, failedSources: failed.map((f) => f.id) },
+  });
   return Response.json({ upserted, removed, sources: report });
 }
