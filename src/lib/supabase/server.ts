@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 export function supabaseConfigured() {
@@ -12,6 +13,10 @@ export function supabaseConfigured() {
  */
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
+  // Session data from cookies() still resolves in the prefetched App Shell, but supabase-js
+  // checks token expiry with Date.now(), which Cache Components rejects during prerendering.
+  // connection() defers everything after this point to request time.
+  await connection();
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookies: {
       getAll() {
