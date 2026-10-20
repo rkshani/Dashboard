@@ -93,7 +93,7 @@ async function InvoiceBody({ params }: { params: PageProps<"/app/invoice/[id]">[
           </div>
         </div>
 
-        {project && <p className="mt-8 text-sm text-muted">{template.vocabulary.project}: <span className="text-ink">{project.title}</span></p>}
+        {project && <p className="mt-8 text-sm text-muted">{template.vocabulary.project}: <Link href={`/app/project/${project.id}`} className="text-ink hover:underline">{project.title}</Link></p>}
 
         <table className="mt-6 w-full text-sm">
           <thead>
@@ -143,7 +143,7 @@ async function InvoiceBody({ params }: { params: PageProps<"/app/invoice/[id]">[
           <p className="mt-1 text-sm text-muted">Demo mode: emails aren&apos;t sent. Use Print / save as PDF to share it.</p>
         ) : !client?.email ? (
           <p className="mt-1 text-sm text-muted">
-            {client ? <>Add an email address to {client.name} on the <Link href="/app/clients" className="text-accent underline">{template.vocabulary.clients}</Link> page first.</> : `Pick a ${template.vocabulary.client.toLowerCase()} for this invoice first.`}
+            {client ? <>Add an email address to {client.name} on <Link href={`/app/client/${client.id}`} className="text-accent underline">their profile</Link> first.</> : `Pick a ${template.vocabulary.client.toLowerCase()} for this invoice first.`}
           </p>
         ) : !emailConfigured() ? (
           <p className="mt-1 text-sm text-warn">Email sending isn&apos;t set up on this server yet.</p>

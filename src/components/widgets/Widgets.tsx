@@ -221,7 +221,9 @@ function Projects({ template, widget, data }: WidgetProps) {
           {items.map((p) => (
             <li key={p.id}>
               <div className="flex justify-between gap-2 text-sm">
-                <span className="truncate font-medium">{p.name}</span>
+                <Link href={`/app/project/${p.id}`} className="truncate font-medium hover:text-accent hover:underline">
+                  {p.name}
+                </Link>
                 <span className="font-mono text-xs text-muted">{p.pct}%</span>
               </div>
               <div className="truncate text-xs text-muted">{p.meta}</div>

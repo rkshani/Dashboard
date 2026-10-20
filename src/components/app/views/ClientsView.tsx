@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { deleteClient, saveClient } from "@/app/app/work-actions";
 import { ActionForm, MiniAction } from "@/components/app/forms";
 import { inputCls, labelCls } from "@/components/app/styles";
@@ -5,10 +6,10 @@ import { Icon } from "@/components/Sections";
 import { CLIENT_STATUSES, type Client, type Project } from "@/lib/data/types";
 import type { Template } from "@/templates";
 
-const statusLabel: Record<Client["status"], string> = { lead: "Lead", active: "Active", past: "Past" };
-const statusTone: Record<Client["status"], string> = { lead: "bg-warn/15 text-warn", active: "bg-good/15 text-good", past: "bg-surface-2 text-muted" };
+export const clientStatusLabel: Record<Client["status"], string> = { lead: "Lead", active: "Active", past: "Past" };
+export const clientStatusTone: Record<Client["status"], string> = { lead: "bg-warn/15 text-warn", active: "bg-good/15 text-good", past: "bg-surface-2 text-muted" };
 
-function ClientFields({ client, v }: { client?: Client; v: Template["vocabulary"] }) {
+export function ClientFields({ client, v }: { client?: Client; v: Template["vocabulary"] }) {
   const uid = client?.id ?? "new";
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -35,7 +36,7 @@ function ClientFields({ client, v }: { client?: Client; v: Template["vocabulary"
           {CLIENT_STATUSES.map((s) => (
             <label key={s} className="flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-line px-3 text-sm has-[:checked]:border-accent">
               <input type="radio" name="status" value={s} defaultChecked={(client?.status ?? "active") === s} className="accent-[var(--accent)]" id={`${uid}-${s}`} />
-              {statusLabel[s]}
+              {clientStatusLabel[s]}
             </label>
           ))}
         </div>
@@ -96,9 +97,12 @@ export function ClientsView({ template, clients, projects }: { template: Templat
                   <span className="text-xs text-muted">
                     {projectCount(c.id)} {projectCount(c.id) === 1 ? v.project.toLowerCase() : v.projects.toLowerCase()}
                   </span>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone[c.status]}`}>{statusLabel[c.status]}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${clientStatusTone[c.status]}`}>{clientStatusLabel[c.status]}</span>
                 </summary>
                 <div className="border-t border-line p-5">
+                  <Link href={`/app/client/${c.id}`} className="lift mb-4 inline-flex h-10 items-center rounded-xl border border-line px-4 text-sm font-medium hover:border-accent">
+                    Open full profile →
+                  </Link>
                   <ActionForm action={saveClient} submitLabel="Save changes">
                     <ClientFields client={c} v={v} />
                   </ActionForm>

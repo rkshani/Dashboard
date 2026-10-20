@@ -1,6 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { redirect } from "next/navigation";
 import { getRepo } from "@/lib/data";
 import { NotFoundError } from "@/lib/data/repo";
 import { clientInput, idSchema, PROJECT_STATUSES, projectInput, taskInput, type FormState } from "@/lib/data/types";
@@ -33,6 +34,13 @@ async function run(fn: () => Promise<void>, success: string): Promise<FormState>
   }
 }
 
+/** After deleting from a detail page, go back to its list. Only fixed in-app paths are allowed. */
+const AFTER_DELETE = new Set(["/app/clients", "/app/projects"]);
+function goAfterDelete(fd: FormData) {
+  const to = fd.get("then");
+  if (typeof to === "string" && AFTER_DELETE.has(to)) redirect(to);
+}
+
 // ---------------- Clients ----------------
 
 export async function saveClient(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -52,7 +60,8 @@ export async function deleteClient(fd: FormData) {
   const id = idSchema.safeParse(fd.get("id"));
   if (!id.success) return;
   const { repo } = await getRepo();
-  await run(() => repo.deleteClient(id.data), "Deleted.");
+  const r = await run(() => repo.deleteClient(id.data), "Deleted.");
+  if (r.status === "success") goAfterDelete(fd);
 }
 
 // ---------------- Projects ----------------
@@ -81,7 +90,8 @@ export async function deleteProject(fd: FormData) {
   const id = idSchema.safeParse(fd.get("id"));
   if (!id.success) return;
   const { repo } = await getRepo();
-  await run(() => repo.deleteProject(id.data), "Deleted.");
+  const r = await run(() => repo.deleteProject(id.data), "Deleted.");
+  if (r.status === "success") goAfterDelete(fd);
 }
 
 // ---------------- Tasks ----------------

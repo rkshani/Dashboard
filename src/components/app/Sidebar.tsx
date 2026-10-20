@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Icon } from "@/components/Sections";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { signOut } from "@/app/auth-actions";
+import { CommandPalette, SearchButton } from "./CommandPalette";
 
 export type NavItem = { href: string; label: string; icon: string };
 
@@ -20,6 +21,8 @@ export function Sidebar({ items, appName, templateName, demo }: { items: NavItem
       {/* Mobile top bar */}
       <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-bg/90 px-4 backdrop-blur lg:hidden">
         <span className="font-display text-lg font-bold">{appName}</span>
+        <div className="flex items-center gap-2">
+        <SearchButton compact />
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -30,7 +33,9 @@ export function Sidebar({ items, appName, templateName, demo }: { items: NavItem
         >
           <Icon name={open ? "close" : "menu"} />
         </button>
+        </div>
       </div>
+      <CommandPalette items={items} />
 
       <nav
         id="app-nav"
@@ -46,6 +51,8 @@ export function Sidebar({ items, appName, templateName, demo }: { items: NavItem
           </span>
           <span className="font-display text-lg font-bold">{appName}</span>
         </Link>
+
+        <SearchButton className="mb-3 hidden lg:flex" />
 
         {items.map((item) => {
           const active = isActive(item.href);

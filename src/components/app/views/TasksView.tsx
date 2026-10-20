@@ -9,7 +9,7 @@ import type { Template } from "@/templates";
 const prioTone: Record<Priority, string> = { high: "bg-warn/15 text-warn", normal: "bg-surface-2 text-muted", low: "bg-surface-2 text-muted" };
 const prioRank: Record<Priority, number> = { high: 0, normal: 1, low: 2 };
 
-function TaskRow({ t, project, today, projects, projectLabel }: { t: Task; project?: Project; today: string; projects: Project[]; projectLabel: string }) {
+export function TaskRow({ t, project, today, projects, projectLabel }: { t: Task; project?: Project; today: string; projects: Project[]; projectLabel: string }) {
   const overdue = !t.done && t.dueDate && daysBetween(today, t.dueDate) < 0;
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface-2">

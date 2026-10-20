@@ -7,11 +7,11 @@ import { daysBetween, relativeDay } from "@/lib/dates";
 import { PROJECT_STATUSES, type Client, type Project, type ProjectStatus, type Task } from "@/lib/data/types";
 import type { Template } from "@/templates";
 
-const statusLabel: Record<ProjectStatus, string> = { planning: "Planning", active: "In progress", review: "In review", done: "Done" };
+export const projectStatusLabel: Record<ProjectStatus, string> = { planning: "Planning", active: "In progress", review: "In review", done: "Done" };
 const statusDot: Record<ProjectStatus, string> = { planning: "bg-muted", active: "bg-accent", review: "bg-warn", done: "bg-good" };
-const statusOptions = PROJECT_STATUSES.map((s) => ({ value: s, label: statusLabel[s] }));
+export const projectStatusOptions = PROJECT_STATUSES.map((s) => ({ value: s, label: projectStatusLabel[s] }));
 
-function ProjectFields({ project, clients, v, currency }: { project?: Project; clients: Client[]; v: Template["vocabulary"]; currency: string }) {
+export function ProjectFields({ project, clients, v, currency }: { project?: Project; clients: Client[]; v: Template["vocabulary"]; currency: string }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {project && <input type="hidden" name="id" value={project.id} />}
@@ -34,7 +34,7 @@ function ProjectFields({ project, clients, v, currency }: { project?: Project; c
       <label className="flex flex-col gap-1.5">
         <span className={labelCls}>Status</span>
         <select name="status" defaultValue={project?.status ?? "planning"} className={inputCls}>
-          {statusOptions.map((o) => (
+          {projectStatusOptions.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
@@ -82,7 +82,11 @@ function ProjectCard({
 
   return (
     <article className="lift rounded-2xl border border-line bg-surface p-4">
-      <h3 className="font-medium leading-snug">{p.title}</h3>
+      <h3 className="font-medium leading-snug">
+        <Link href={`/app/project/${p.id}`} className="hover:text-accent hover:underline">
+          {p.title}
+        </Link>
+      </h3>
       <p className="mt-1 text-xs text-muted">{client ? client.name : `No ${v.client.toLowerCase()}`}</p>
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         {p.deadline && (
@@ -108,7 +112,7 @@ function ProjectCard({
       </div>
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
         <span className="text-xs text-muted">Move to</span>
-        <StatusSelect action={moveProject} id={p.id} value={p.status} options={statusOptions} label={`Status of ${p.title}`} />
+        <StatusSelect action={moveProject} id={p.id} value={p.status} options={projectStatusOptions} label={`Status of ${p.title}`} />
       </div>
       <details className="mt-2">
         <summary className="cursor-pointer list-none text-xs text-accent hover:underline">Edit</summary>
@@ -198,10 +202,10 @@ export function ProjectsView({
           {PROJECT_STATUSES.map((s, i) => {
             const col = projects.filter((p) => p.status === s).sort(byDeadline);
             return (
-              <section key={s} aria-label={statusLabel[s]} className="anim-rise flex min-w-0 flex-col gap-3 rounded-2xl bg-surface-2/50 p-3" style={{ animationDelay: `${100 + i * 60}ms` }}>
+              <section key={s} aria-label={projectStatusLabel[s]} className="anim-rise flex min-w-0 flex-col gap-3 rounded-2xl bg-surface-2/50 p-3" style={{ animationDelay: `${100 + i * 60}ms` }}>
                 <h2 className="flex items-center gap-2 px-1 text-sm font-semibold">
                   <span className={`h-2 w-2 rounded-full ${statusDot[s]}`} aria-hidden="true" />
-                  {statusLabel[s]}
+                  {projectStatusLabel[s]}
                   <span className="ml-auto font-mono text-xs text-muted">{col.length}</span>
                 </h2>
                 {col.length ? col.map(card) : <p className="px-1 py-6 text-center text-xs text-muted">Nothing here</p>}
