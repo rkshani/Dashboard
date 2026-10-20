@@ -8,7 +8,7 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { signOut } from "@/app/auth-actions";
 import { CommandPalette, SearchButton } from "./CommandPalette";
 
-export type NavItem = { href: string; label: string; icon: string };
+export type NavItem = { href: string; label: string; icon: string; badge?: number };
 
 export function Sidebar({ items, appName, templateName, demo }: { items: NavItem[]; appName: string; templateName: string; demo: boolean }) {
   const pathname = usePathname();
@@ -65,7 +65,13 @@ export function Sidebar({ items, appName, templateName, demo }: { items: NavItem
               className={`flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors ${active ? "bg-surface-2 text-ink" : "text-muted hover:bg-surface-2 hover:text-ink"}`}
             >
               <Icon name={item.icon} className={active ? "text-accent" : ""} />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.badge ? (
+                <span className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] font-bold leading-none text-accent-ink">
+                  {item.badge > 99 ? "99+" : item.badge}
+                  <span className="sr-only"> unread</span>
+                </span>
+              ) : null}
             </Link>
           );
         })}

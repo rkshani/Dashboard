@@ -34,6 +34,7 @@ const paths: Record<string, string> = {
   menu: "M4 6h16 M4 12h16 M4 18h16",
   close: "M6 6l12 12 M18 6L6 18",
   plus: "M12 5v14 M5 12h14",
+  bell: "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0",
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14 M20 20l-4-4",
   edit: "M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3 M14 7l3 3",
 };

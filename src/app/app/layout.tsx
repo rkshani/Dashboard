@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Sidebar } from "@/components/app/Sidebar";
 import { ProfileTheme } from "@/components/app/ProfileTheme";
 import { requireProfile } from "@/lib/auth";
+import { getRepo } from "@/lib/data";
 import { site } from "@/lib/site";
 import { getTemplate } from "@/templates";
 
@@ -27,8 +28,11 @@ export default function AppLayout({ children }: LayoutProps<"/app">) {
 async function AppNav() {
   const { user, profile } = await requireProfile();
   const template = getTemplate(profile.templateId);
+  const { repo } = await getRepo();
+  const unread = await repo.countUnreadNotifications().catch(() => 0);
   const items = [
     { href: "/app", label: "Home", icon: "home" },
+    { href: "/app/notifications", label: "Notifications", icon: "bell", badge: unread },
     ...template.modules.map((m) => ({ href: `/app/${m.id}`, label: m.label, icon: m.icon })),
     { href: "/app/settings", label: "Settings", icon: "settings" },
   ];

@@ -5,6 +5,7 @@ import { getFeed } from "@/lib/opportunities/feed";
 import type { Profile } from "@/lib/profile";
 import type { Template } from "@/templates";
 import type { AutomationSettings } from "./types";
+import { notify } from "@/lib/notifications/notify";
 
 export function ruleEnabled(template: Template, settings: AutomationSettings, id: string) {
   const def = template.automations.find((a) => a.id === id);
@@ -34,6 +35,7 @@ export async function runAutomations(ctx: { repo: Repo; profile: Profile; templa
         await repo.setOpportunityStatus(o.id, "saved");
         await repo.createTask({ title: `Review ${v.opportunity.toLowerCase()}: ${o.title}`.slice(0, 200), projectId: null, dueDate: today, priority: "high" });
         done.push({ ruleId: "high-match-task", message });
+        await notify(repo, { kind: "match", title: `Strong match: ${o.title}`, body: `${o.company} · score ${o.score}. Saved to your pipeline.`, href: "/app/opportunities?tab=pipeline" });
       }
     }
   }
@@ -48,6 +50,7 @@ export async function runAutomations(ctx: { repo: Repo; profile: Profile; templa
       if (await repo.logAutomation("deadline-warning", `${p.id}:${p.deadline}`, message)) {
         await repo.createTask({ title: `${v.project} due ${when}: ${p.title}`.slice(0, 200), projectId: p.id, dueDate: today, priority: "high" });
         done.push({ ruleId: "deadline-warning", message });
+        await notify(repo, { kind: "deadline", title: `${p.title} is due ${when}`, body: "A reminder task was added for today.", href: `/app/project/${p.id}` });
       }
     }
   }
@@ -61,6 +64,7 @@ export async function runAutomations(ctx: { repo: Repo; profile: Profile; templa
       if (await repo.logAutomation("invoice-overdue", `${inv.id}:${inv.dueDate}`, message)) {
         await repo.createTask({ title: `Chase payment: ${inv.number}${who ? ` (${who})` : ""}`.slice(0, 200), projectId: inv.projectId, dueDate: today, priority: "high" });
         done.push({ ruleId: "invoice-overdue", message });
+        await notify(repo, { kind: "invoice", title: `${inv.number} is overdue`, body: who ? `${who} hasn't paid yet. A chase task was added.` : "A chase task was added.", href: `/app/invoice/${inv.id}` });
       }
     }
   }

@@ -55,7 +55,7 @@ export async function addTransaction(_prev: FormState, fd: FormData): Promise<Fo
   const { date, ...rest } = parsed.data;
   return run(async () => {
     await repo.createRecurring({ ...rest, currency, cadence: repeat.data as MoneyCadence, startDate: date, nextDate: date });
-    await materializeRecurring(repo, today);
+    await materializeRecurring(repo, today, false);
   }, date > today ? `Repeating ${noun} saved. The first one is added on ${date}.` : `Repeating ${noun} saved and added.`);
 }
 

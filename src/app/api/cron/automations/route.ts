@@ -67,6 +67,9 @@ export async function GET(req: Request) {
       console.error("[automations] user run failed:", e instanceof Error ? e.message : e);
     }
   }
+  // Housekeeping: notifications older than 90 days.
+  await db.from("notifications").delete().lt("created_at", new Date(Date.now() - 90 * 86_400_000).toISOString());
+
   await recordJobRun(db, "automations", {
     ok: stats.failures === 0 || stats.failures < stats.users,
     error: stats.failures ? `${stats.failures} of ${stats.users} users failed` : undefined,

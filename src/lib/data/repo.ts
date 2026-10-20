@@ -1,6 +1,7 @@
 import type { BusinessProfile, Client, NewRecurring, RecurringTxn, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
+import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
 import type { AutomationLogEntry, AutomationSettings, Integration } from "@/lib/automations/types";
 
 export type NewInvoice = InvoiceInput & { number: string; currency: string; total: number };
@@ -58,6 +59,14 @@ export interface Repo {
 
   getBusinessProfile(): Promise<BusinessProfile>;
   saveBusinessProfile(b: BusinessProfile): Promise<void>;
+
+  listNotifications(limit?: number): Promise<AppNotification[]>;
+  countUnreadNotifications(): Promise<number>;
+  addNotification(n: NewNotification): Promise<void>;
+  markNotificationsRead(): Promise<void>;
+  listPushSubscriptions(): Promise<PushSubscriptionRecord[]>;
+  savePushSubscription(s: PushSubscriptionRecord): Promise<void>;
+  deletePushSubscription(endpoint: string): Promise<void>;
 
   getIntegration(provider: "google"): Promise<Integration | null>;
   saveIntegration(i: Omit<Integration, "connectedAt">): Promise<void>;

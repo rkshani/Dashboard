@@ -4,6 +4,7 @@ import { NotFoundError, type NewInvoice, type Repo } from "./repo";
 import type { PipelineStatus, Posting, SourceId } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationSettings } from "@/lib/automations/types";
 import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
+import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
 import type { Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 type ClientRow = { id: string; name: string; company: string | null; email: string | null; phone: string | null; status: Client["status"]; notes: string | null; created_at: string };
@@ -361,6 +362,40 @@ export class SupabaseRepo implements Repo {
   }
 
   // ---------------- Integrations ----------------
+
+  async listNotifications(limit = 50) {
+    const { data, error } = await this.db.from("notifications").select("id,kind,title,body,href,created_at,read_at").eq("owner_id", this.owner).order("created_at", { ascending: false }).limit(limit);
+    check(error);
+    return (data as { id: string; kind: AppNotification["kind"]; title: string; body: string | null; href: string | null; created_at: string; read_at: string | null }[]).map(
+      (r): AppNotification => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, href: r.href, createdAt: r.created_at, readAt: r.read_at }),
+    );
+  }
+  async countUnreadNotifications() {
+    const { count, error } = await this.db.from("notifications").select("id", { count: "exact", head: true }).eq("owner_id", this.owner).is("read_at", null);
+    check(error);
+    return count ?? 0;
+  }
+  async addNotification(n: NewNotification) {
+    const { error } = await this.db.from("notifications").insert({ owner_id: this.owner, kind: n.kind, title: n.title, body: n.body, href: n.href });
+    check(error);
+  }
+  async markNotificationsRead() {
+    const { error } = await this.db.from("notifications").update({ read_at: new Date().toISOString() }).eq("owner_id", this.owner).is("read_at", null);
+    check(error);
+  }
+  async listPushSubscriptions() {
+    const { data, error } = await this.db.from("push_subscriptions").select("endpoint,p256dh,auth").eq("owner_id", this.owner).limit(20);
+    check(error);
+    return (data ?? []) as PushSubscriptionRecord[];
+  }
+  async savePushSubscription(sub: PushSubscriptionRecord) {
+    const { error } = await this.db.from("push_subscriptions").upsert({ owner_id: this.owner, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth }, { onConflict: "endpoint" });
+    check(error);
+  }
+  async deletePushSubscription(endpoint: string) {
+    const { error } = await this.db.from("push_subscriptions").delete().eq("owner_id", this.owner).eq("endpoint", endpoint);
+    check(error);
+  }
 
   async getIntegration(provider: "google") {
     const { data, error } = await this.db.from("integrations").select("provider,refresh_token_enc,account_email,scope,connected_at").eq("owner_id", this.owner).eq("provider", provider).maybeSingle();

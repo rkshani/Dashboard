@@ -6,6 +6,7 @@ import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationLogEntry, type AutomationSettings } from "@/lib/automations/types";
 import type { CalEvent, NewEvent } from "@/lib/calendar/types";
 import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
+import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
 import type { Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 /**
@@ -13,7 +14,7 @@ import type { Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceS
  * It lives in the server process: restarting the server resets it.
  * Capped so a public demo can't be used to fill memory.
  */
-type Store = { recurring: RecurringTxn[]; clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
+type Store = { notifications?: AppNotification[]; push?: PushSubscriptionRecord[]; recurring: RecurringTxn[]; clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
 const LIMIT = { recurring: 50, sessions: 500, clients: 200, projects: 200, tasks: 1000, transactions: 2000, invoices: 300 };
 
 const g = globalThis as unknown as { __dashDemo?: Map<string, Store> };
@@ -305,6 +306,33 @@ export class DemoRepo implements Repo {
   }
 
   // Google isn't available in demo mode; the calendar uses demo events instead.
+  async listNotifications(limit = 50) {
+    return (this.s.notifications ??= []).slice(0, limit);
+  }
+  async countUnreadNotifications() {
+    return (this.s.notifications ??= []).filter((n) => !n.readAt).length;
+  }
+  async addNotification(n: NewNotification) {
+    const list = (this.s.notifications ??= []);
+    list.unshift({ id: randomUUID(), ...n, createdAt: new Date().toISOString(), readAt: null });
+    if (list.length > 200) list.length = 200;
+  }
+  async markNotificationsRead() {
+    const now = new Date().toISOString();
+    for (const n of (this.s.notifications ??= [])) n.readAt ??= now;
+  }
+  async listPushSubscriptions() {
+    return [...(this.s.push ??= [])];
+  }
+  async savePushSubscription(sub: PushSubscriptionRecord) {
+    const list = (this.s.push ??= []).filter((x) => x.endpoint !== sub.endpoint);
+    list.push(sub);
+    this.s.push = list.slice(-5);
+  }
+  async deletePushSubscription(endpoint: string) {
+    this.s.push = (this.s.push ??= []).filter((x) => x.endpoint !== endpoint);
+  }
+
   async getIntegration() {
     return null;
   }
