@@ -29,7 +29,7 @@ demo session (seeded with examples; restarting the server resets them). Demo mod
 ## Supabase setup (real accounts)
 
 1. Create a project at supabase.com.
-2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0012`).
+2. **SQL Editor:** run the files in `supabase/migrations/` in order (`0001` → `0013`).
 3. **Settings → API:** copy the Project URL and anon public key into `.env.local`.
 4. **Authentication → URL Configuration:** set Site URL to your domain and add
    `http://localhost:3000/auth/callback` and `https://your-domain.com/auth/callback` to Redirect URLs.
@@ -77,6 +77,12 @@ demo session (seeded with examples; restarting the server resets them). Demo mod
 | Proposal and cover-letter drafts (Claude, with a template fallback) | `src/lib/proposals/`, `src/app/app/proposal/[id]/` |
 | Teachers: fees per student, attendance, weekly timetable | `src/lib/teaching/`, `src/components/app/views/FeesPanel.tsx`, `TimetableView.tsx`, `src/app/app/attendance/` |
 | Marketers: content calendar | `src/components/app/views/ContentView.tsx`, `src/app/app/content-actions.ts` |
+| Quick add ("Lunch 500 PKR yesterday") | `src/lib/quick-add.ts`, `src/components/app/QuickAdd.tsx` |
+| CSV import (transactions, clients) and CSV writing | `src/lib/csv.ts`, `src/lib/import/`, `src/components/app/CsvImport.tsx` |
+| Invoice PDF (download and email attachment) | `src/lib/invoices/pdf.ts`, `src/lib/invoices/send.ts`, `src/app/app/invoice/[id]/pdf/route.ts` |
+| Payment reminder emails to clients (automation, off by default) | `src/lib/invoices/reminders.ts`, `src/lib/automations/engine.ts` |
+| Profit & loss and transactions export | `src/lib/reports/pnl.ts`, `src/app/app/export/route.ts` |
+| Repeating invoices | `src/lib/recurring-invoices.ts`, `supabase/migrations/0013_recurring_invoices.sql` |
 | Unit tests (`npm test`) | `tests/` |
 | Database tests (`npm run test:db`, needs local PostgreSQL): applies every migration and checks permissions | `supabase/tests/`, `scripts/test-db.sh` |
 | Shared rate limiter (Upstash Redis, memory fallback) | `src/lib/rate-limit.ts` |

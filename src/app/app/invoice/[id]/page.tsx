@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { sendInvoiceToClient, setInvoiceStatus } from "@/app/app/finance-actions";
+import { repeatInvoice, sendInvoiceToClient, setInvoiceStatus } from "@/app/app/finance-actions";
 import { InvoiceBuilder } from "@/components/app/InvoiceBuilder";
 import { ActionForm, MiniAction } from "@/components/app/forms";
 import { inputCls, labelCls } from "@/components/app/styles";
@@ -12,7 +12,9 @@ import { invoiceBadge } from "@/components/app/views/InvoicesView";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { idSchema } from "@/lib/data/types";
+import { addDays } from "@/lib/dates";
 import { fmtMoney } from "@/lib/money";
+import { cadenceLabel, MONEY_CADENCES, nextMoneyDate } from "@/lib/recurrence";
 import { getTemplate } from "@/templates";
 
 export const metadata: Metadata = { title: "Invoice" };
@@ -54,6 +56,9 @@ async function InvoiceBody({ params }: { params: PageProps<"/app/invoice/[id]">[
               Mark paid
             </MiniAction>
           )}
+          <a href={`/app/invoice/${inv.id}/pdf`} download className="lift flex h-11 items-center rounded-xl border border-line px-4 text-sm font-medium hover:bg-surface-2">
+            Download PDF
+          </a>
           <PrintButton />
         </div>
       </div>
@@ -140,7 +145,7 @@ async function InvoiceBody({ params }: { params: PageProps<"/app/invoice/[id]">[
       <section aria-label="Email to client" className="no-print mt-6 rounded-2xl border border-line bg-surface p-5">
         <h2 className="font-display text-lg font-semibold">Email to {client?.name ?? "client"}</h2>
         {user.demo ? (
-          <p className="mt-1 text-sm text-muted">Demo mode: emails aren&apos;t sent. Use Print / save as PDF to share it.</p>
+          <p className="mt-1 text-sm text-muted">Demo mode: emails aren&apos;t sent. Use Download PDF to share it.</p>
         ) : !client?.email ? (
           <p className="mt-1 text-sm text-muted">
             {client ? <>Add an email address to {client.name} on <Link href={`/app/client/${client.id}`} className="text-accent underline">their profile</Link> first.</> : `Pick a ${template.vocabulary.client.toLowerCase()} for this invoice first.`}
@@ -158,6 +163,46 @@ async function InvoiceBody({ params }: { params: PageProps<"/app/invoice/[id]">[
           </ActionForm>
         )}
       </section>
+
+      <details className="no-print mt-6 rounded-2xl border border-line bg-surface open:border-accent">
+        <summary className="flex h-14 cursor-pointer list-none items-center px-5 font-medium">Repeat this invoice</summary>
+        <div className="border-t border-line p-5">
+          <p className="text-sm text-muted">
+            For retainers and monthly fees: a new invoice with the same {template.vocabulary.client.toLowerCase()}, items and payment terms is issued on schedule, with its
+            own number.
+          </p>
+          <ActionForm action={repeatInvoice} submitLabel="Save schedule" className="mt-4">
+            <input type="hidden" name="id" value={inv.id} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className={labelCls}>Repeats</span>
+                <select name="cadence" defaultValue="monthly" className={inputCls}>
+                  {MONEY_CADENCES.map((c) => (
+                    <option key={c} value={c}>
+                      {cadenceLabel[c]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className={labelCls}>Next invoice on</span>
+                <input name="nextDate" type="date" required min={addDays(inv.issueDate, 1)} defaultValue={nextMoneyDate("monthly", inv.issueDate, inv.issueDate)} className={inputCls} />
+              </label>
+            </div>
+            {client?.email && !user.demo && emailConfigured() ? (
+              <label className="mt-3 flex items-start gap-2 text-sm">
+                <input type="checkbox" name="autoSend" className="mt-1 accent-[var(--accent)]" />
+                <span>
+                  Email each new invoice to {client.email} automatically
+                  <span className="block text-xs text-muted">Otherwise each one is created as a draft for you to check and send.</span>
+                </span>
+              </label>
+            ) : (
+              <p className="mt-3 text-xs text-muted">New invoices are created as drafts for you to check and send.</p>
+            )}
+          </ActionForm>
+        </div>
+      </details>
 
       {inv.status !== "paid" && (
         <details className="no-print mt-6 rounded-2xl border border-line bg-surface open:border-accent">

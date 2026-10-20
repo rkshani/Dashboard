@@ -13,3 +13,11 @@ select 'all inserts ok';
 set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
 do $$ begin insert into public.attendance (client_id, date, status) values ('dddddddd-0000-4000-8000-000000000001', '2026-10-20', 'present'); raise notice 'LEAK'; exception when others then raise notice 'cross-owner attendance blocked: %', sqlerrm; end $$;
 select 'B sees clients: ' || count(*) from public.clients;
+-- 0013 repeating invoices: owner can save one; another owner can neither see it nor point one at A's client.
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+insert into public.recurring_invoices (client_id, items, total, cadence, start_date, next_date) values ('dddddddd-0000-4000-8000-000000000001', '[{"description":"Retainer","quantity":1,"rate":500}]', 500, 'monthly', '2026-11-01', '2026-11-01');
+select 'A sees recurring invoices: ' || count(*) from public.recurring_invoices;
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select 'B sees recurring invoices: ' || count(*) from public.recurring_invoices;
+do $$ begin insert into public.recurring_invoices (client_id, total, cadence, start_date, next_date) values ('dddddddd-0000-4000-8000-000000000001', 1, 'monthly', '2026-11-01', '2026-11-01'); raise notice 'LEAK'; exception when others then raise notice 'cross-owner recurring invoice blocked: %', sqlerrm; end $$;
+do $$ begin insert into public.recurring_invoices (total, cadence, start_date, next_date, due_days) values (1, 'monthly', '2026-11-01', '2026-11-01', 999); raise notice 'LEAK'; exception when others then raise notice 'bad due_days blocked'; end $$;

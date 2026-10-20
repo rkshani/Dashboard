@@ -10,6 +10,7 @@ import { getTemplate } from "@/templates";
 import { recordJobRun } from "@/lib/jobs";
 import { getRates } from "@/lib/fx";
 import { materializeRecurring } from "@/lib/recurring";
+import { materializeRecurringInvoices } from "@/lib/recurring-invoices";
 
 /**
  * Hourly job: for every onboarded user, run their automation rules, and once it is at or past their
@@ -50,15 +51,17 @@ export async function GET(req: Request) {
       const repo = new SupabaseRepo(db, row.id); // owner-scoped
       const today = todayIn(profile.timezone);
 
+      let ownerEmail: string | null | undefined;
+      const getOwnerEmail = async () => (ownerEmail ??= (await db.auth.admin.getUserById(row.id)).data.user?.email ?? null);
       await materializeRecurring(repo, today);
-      const done = await runAutomations({ repo, profile, template, today, feed });
+      await materializeRecurringInvoices(repo, today, { emailClients: true, senderName: profile.displayName, ownerEmail: getOwnerEmail });
+      const done = await runAutomations({ repo, profile, template, today, feed, emailClients: true, ownerEmail: getOwnerEmail });
       stats.actions += done.length;
 
       const settings = await repo.getAutomationSettings();
       const due = ruleEnabled(template, settings, "morning-digest") && localHour(profile.timezone) >= settings.digestHour && settings.lastDigestOn !== today;
       if (due && emailConfigured()) {
-        const { data: u } = await db.auth.admin.getUserById(row.id);
-        const email = u.user?.email;
+        const email = await getOwnerEmail();
         if (email) {
           // Mark first so a retry or overlapping run can't send twice.
           await repo.saveAutomationSettings({ lastDigestOn: today });

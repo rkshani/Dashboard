@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { deleteInvoice, setInvoiceStatus } from "@/app/app/finance-actions";
+import { deleteInvoice, setInvoiceStatus, stopRecurringInvoice } from "@/app/app/finance-actions";
 import { InvoiceBuilder } from "@/components/app/InvoiceBuilder";
 import { MiniAction } from "@/components/app/forms";
 import { Icon } from "@/components/Sections";
 import { relativeDay } from "@/lib/dates";
-import type { Client, Invoice, Project } from "@/lib/data/types";
+import type { Client, Invoice, Project, RecurringInvoice } from "@/lib/data/types";
 import { toCurrency, type Rates } from "@/lib/fx-math";
 import { fmtMoney } from "@/lib/money";
+import { cadenceLabel } from "@/lib/recurrence";
 import type { Template } from "@/templates";
 
 export function invoiceBadge(inv: Invoice, today: string) {
@@ -27,7 +28,9 @@ export function InvoicesView({
   currency,
   fx,
   defaultDueDate,
+  recurring,
 }: {
+  recurring: RecurringInvoice[];
   template: Template;
   invoices: Invoice[];
   clients: Client[];
@@ -69,6 +72,31 @@ export function InvoicesView({
           />
         </div>
       </details>
+
+      {recurring.length > 0 && (
+        <section aria-label="Repeating invoices" className="anim-rise mt-6 rounded-2xl border border-line bg-surface p-5" style={{ animationDelay: "80ms" }}>
+          <h2 className="font-display text-lg font-semibold">Repeating</h2>
+          <ul className="mt-2 divide-y divide-line">
+            {recurring.map((r) => {
+              const who = r.clientId ? clientName.get(r.clientId) : null;
+              return (
+                <li key={r.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+                  <div className="min-w-0 flex-[1_1_200px]">
+                    <p className="truncate font-medium">{who ?? `No ${v.client.toLowerCase()}`}</p>
+                    <p className="text-xs text-muted">
+                      {cadenceLabel[r.cadence]} · Next: {relativeDay(r.nextDate, today)} · {r.autoSend ? "emailed automatically" : "created as a draft"}
+                    </p>
+                  </div>
+                  <span className="font-mono text-sm">{fmtMoney(r.total, r.currency)}</span>
+                  <MiniAction action={stopRecurringInvoice} fields={{ id: r.id }} confirm={`Stop repeating this invoice${who ? ` for ${who}` : ""}? Invoices already issued stay.`} className="h-9 cursor-pointer rounded-lg px-2 text-xs text-muted hover:bg-surface-2 hover:text-warn">
+                    Stop
+                  </MiniAction>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {invoices.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-line p-10 text-center text-muted">No invoices yet. Create your first one above.</div>

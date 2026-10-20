@@ -8,6 +8,9 @@ import type { AutomationSettings } from "./types";
 import { notify } from "@/lib/notifications/notify";
 import { fmtMoney, monthLabel } from "@/lib/money";
 import { feeRows } from "@/lib/teaching/fees";
+import { emailConfigured } from "@/lib/email";
+import { reminderMessage, reminderStage, reminderSubject } from "@/lib/invoices/reminders";
+import { emailInvoice } from "@/lib/invoices/send";
 
 export function ruleEnabled(template: Template, settings: AutomationSettings, id: string) {
   const def = template.automations.find((a) => a.id === id);
@@ -21,7 +24,17 @@ export type RunResult = { ruleId: string; message: string }[];
  * Runs the task-creating rules once. Every action is recorded in the automation log under a
  * unique (rule, key), so running this every hour never creates duplicates.
  */
-export async function runAutomations(ctx: { repo: Repo; profile: Profile; template: Template; today: string; feed?: FeedContext }): Promise<RunResult> {
+export async function runAutomations(ctx: {
+  repo: Repo;
+  profile: Profile;
+  template: Template;
+  today: string;
+  feed?: FeedContext;
+  /** Allow rules that email the user's clients. Never in demo mode. */
+  emailClients?: boolean;
+  /** The account's email, the reply-to for client emails when no business email is set. Looked up only if needed. */
+  ownerEmail?: () => Promise<string | null>;
+}): Promise<RunResult> {
   const { repo, profile, template, today } = ctx;
   const settings = await repo.getAutomationSettings();
   const on = (id: string) => ruleEnabled(template, settings, id);
@@ -68,6 +81,35 @@ export async function runAutomations(ctx: { repo: Repo; profile: Profile; templa
         await repo.createTask({ title: `Chase payment: ${inv.number}${who ? ` (${who})` : ""}`.slice(0, 200), projectId: inv.projectId, dueDate: today, priority: "high" });
         done.push({ ruleId: "invoice-overdue", message });
         await notify(repo, { kind: "invoice", title: `${inv.number} is overdue`, body: who ? `${who} hasn't paid yet. A chase task was added.` : "A chase task was added.", href: `/app/invoice/${inv.id}` });
+      }
+    }
+  }
+
+  // 3b. Overdue invoices → polite reminder email to the client, with the PDF (off by default; it
+  // writes to someone other than the user). One email per stage per invoice, at most 10 per run.
+  if (on("invoice-reminder-email") && ctx.emailClients && emailConfigured()) {
+    const [clients, business] = await Promise.all([repo.listClients(), repo.getBusinessProfile()]);
+    const replyTo = business.contactEmail ?? (await ctx.ownerEmail?.()) ?? null;
+    const from = business.businessName || profile.displayName;
+    let sent = 0;
+    for (const inv of (await repo.listInvoices()).filter((i) => i.status === "sent" && i.dueDate && i.dueDate < today)) {
+      if (sent >= 10 || !replyTo) break;
+      const client = inv.clientId ? clients.find((c) => c.id === inv.clientId) : undefined;
+      const stage = reminderStage(inv.dueDate!, today);
+      if (!client?.email || !stage) continue;
+      const daysLate = daysBetween(inv.dueDate!, today);
+      const message = `Emailed payment reminder ${stage} of 3 for ${inv.number} to ${client.name}`;
+      // Logged before sending, so an overlapping run can't email the client twice.
+      if (!(await repo.logAutomation("invoice-reminder-email", `${inv.id}:${inv.dueDate}:${stage}`, message))) continue;
+      try {
+        const note = reminderMessage(stage, { clientName: client.name, number: inv.number, amount: fmtMoney(inv.total, inv.currency), daysLate, from });
+        await emailInvoice({ invoice: inv, client, business, senderName: profile.displayName, replyTo, message: note, subject: reminderSubject(stage, inv.number, from) });
+        sent++;
+        done.push({ ruleId: "invoice-reminder-email", message });
+        await notify(repo, { kind: "invoice", title: `Reminder sent for ${inv.number}`, body: `${client.name} was emailed a payment reminder (${stage} of 3).`, href: `/app/invoice/${inv.id}` });
+      } catch (e) {
+        console.error("[automations] reminder email failed:", e instanceof Error ? e.message : e);
+        await notify(repo, { kind: "invoice", title: `Couldn't email a reminder for ${inv.number}`, body: `Check ${client.name}'s email address, or send it from the invoice page.`, href: `/app/invoice/${inv.id}` });
       }
     }
   }

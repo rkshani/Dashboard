@@ -3,9 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { NotFoundError, type NewInvoice, type Proposal, type Repo } from "./repo";
 import type { PipelineStatus, Posting, SourceId } from "@/lib/opportunities/types";
 import { DEFAULT_SETTINGS, type AutomationSettings } from "@/lib/automations/types";
-import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
+import { EMPTY_BUSINESS, MissingMigrationError, type BusinessProfile } from "./types";
 import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
-import type { AttendanceEntry, ContentInput, ContentPost, ContentStatus, SlotInput, TimetableSlot, Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { AttendanceEntry, ContentInput, ContentPost, ContentStatus, SlotInput, TimetableSlot, Client, ClientInput, NewRecurring, NewRecurringInvoice, RecurringInvoice, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 type ClientRow = { id: string; name: string; company: string | null; email: string | null; phone: string | null; status: Client["status"]; notes: string | null; monthly_fee: number | string | null; fee_due_day: number | null; class_id: string | null; created_at: string };
 type ContentRow = { id: string; title: string; channel: string; date: string; time: string | null; status: ContentStatus; caption: string | null; campaign_id: string | null; client_id: string | null; created_at: string };
@@ -15,6 +15,10 @@ type ProjectRow = { id: string; client_id: string | null; title: string; status:
 type TaskRow = { id: string; project_id: string | null; title: string; due_date: string | null; priority: Task["priority"]; done: boolean; done_at: string | null; repeat: Task["repeat"] | null; created_at: string };
 type RecRow = { id: string; kind: RecurringTxn["kind"]; amount: number | string; currency: string; category: string; note: string | null; client_id: string | null; project_id: string | null; cadence: RecurringTxn["cadence"]; start_date: string; next_date: string; created_at: string };
 const toRec = (r: RecRow): RecurringTxn => ({ id: r.id, kind: r.kind, amount: Number(r.amount), currency: r.currency, category: r.category, note: r.note, clientId: r.client_id, projectId: r.project_id, cadence: r.cadence, startDate: r.start_date, nextDate: r.next_date, createdAt: r.created_at });
+type RecInvRow = { id: string; client_id: string | null; project_id: string | null; currency: string; items: RecurringInvoice["items"]; total: number | string; notes: string | null; cadence: RecurringInvoice["cadence"]; due_days: number; auto_send: boolean; start_date: string; next_date: string; created_at: string };
+const toRecInv = (r: RecInvRow): RecurringInvoice => ({ id: r.id, clientId: r.client_id, projectId: r.project_id, currency: r.currency, items: r.items, total: Number(r.total), notes: r.notes, cadence: r.cadence, dueDays: r.due_days, autoSend: r.auto_send, startDate: r.start_date, nextDate: r.next_date, createdAt: r.created_at });
+// Postgres "undefined table", or PostgREST's "table not in schema cache": the migration hasn't been run.
+const missingTable = (e: { code?: string } | null) => e?.code === "42P01" || e?.code === "PGRST205";
 
 type TxRow = { id: string; kind: Transaction["kind"]; amount: number | string; currency: string; category: string; date: string; note: string | null; client_id: string | null; project_id: string | null; invoice_id: string | null; created_at: string };
 type InvoiceRow = { id: string; client_id: string | null; project_id: string | null; number: string; issue_date: string; due_date: string | null; currency: string; items: Invoice["items"]; total: number | string; status: InvoiceStatus; paid_at: string | null; notes: string | null; created_at: string };
@@ -100,6 +104,13 @@ export class SupabaseRepo implements Repo {
     const { data, error } = await this.db.from("clients").insert({ owner_id: this.owner, name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes, monthly_fee: i.monthlyFee, fee_due_day: i.feeDueDay, class_id: i.classId }).select().single<ClientRow>();
     check(error);
     return toClient(data!);
+  }
+  async createClients(inputs: ClientInput[]) {
+    if (!inputs.length) return 0;
+    const rows = inputs.map((i) => ({ owner_id: this.owner, name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes, monthly_fee: i.monthlyFee, fee_due_day: i.feeDueDay, class_id: i.classId }));
+    const { error } = await this.db.from("clients").insert(rows);
+    check(error);
+    return inputs.length;
   }
   async updateClient(id: string, i: ClientInput) {
     const { data, error } = await this.db.from("clients").update({ name: i.name, company: i.company, email: i.email, phone: i.phone, status: i.status, notes: i.notes, monthly_fee: i.monthlyFee, fee_due_day: i.feeDueDay, class_id: i.classId }).eq("owner_id", this.owner).eq("id", id).select("id");
@@ -188,6 +199,14 @@ export class SupabaseRepo implements Repo {
     check(error);
     return toTx(data!);
   }
+  async createTransactions(inputs: TransactionInput[]) {
+    if (!inputs.length) return 0;
+    // One INSERT for the whole import: one round trip, and all-or-nothing, so a failed import never half-saves.
+    const rows = inputs.map((t) => ({ owner_id: this.owner, kind: t.kind, amount: t.amount, currency: t.currency, category: t.category, date: t.date, note: t.note, client_id: t.clientId, project_id: t.projectId, invoice_id: t.invoiceId ?? null }));
+    const { error } = await this.db.from("transactions").insert(rows);
+    check(error);
+    return inputs.length;
+  }
   async deleteTransaction(id: string) {
     const { error } = await this.db.from("transactions").delete().eq("owner_id", this.owner).eq("id", id);
     check(error);
@@ -213,6 +232,31 @@ export class SupabaseRepo implements Repo {
   }
   async deleteRecurring(id: string) {
     const { error } = await this.db.from("recurring_transactions").delete().eq("owner_id", this.owner).eq("id", id);
+    check(error);
+  }
+
+  async listRecurringInvoices() {
+    const { data, error } = await this.db.from("recurring_invoices").select("*").eq("owner_id", this.owner).order("next_date").limit(200);
+    if (missingTable(error)) return [];
+    check(error);
+    return (data as RecInvRow[]).map(toRecInv);
+  }
+  async createRecurringInvoice(i: NewRecurringInvoice) {
+    const { data, error } = await this.db
+      .from("recurring_invoices")
+      .insert({ owner_id: this.owner, client_id: i.clientId, project_id: i.projectId, currency: i.currency, items: i.items, total: i.total, notes: i.notes, cadence: i.cadence, due_days: i.dueDays, auto_send: i.autoSend, start_date: i.startDate, next_date: i.nextDate })
+      .select()
+      .single<RecInvRow>();
+    if (missingTable(error)) throw new MissingMigrationError("0013");
+    check(error);
+    return toRecInv(data!);
+  }
+  async setRecurringInvoiceNext(id: string, nextDate: string) {
+    const { error } = await this.db.from("recurring_invoices").update({ next_date: nextDate }).eq("owner_id", this.owner).eq("id", id);
+    check(error);
+  }
+  async deleteRecurringInvoice(id: string) {
+    const { error } = await this.db.from("recurring_invoices").delete().eq("owner_id", this.owner).eq("id", id);
     check(error);
   }
 
@@ -394,6 +438,13 @@ export class SupabaseRepo implements Repo {
     check(error);
   }
 
+  async listProposals() {
+    const { data, error } = await this.db.from("proposals").select("opportunity_id,body,source,updated_at").eq("owner_id", this.owner).order("updated_at", { ascending: false });
+    check(error);
+    return (data as { opportunity_id: string; body: string; source: Proposal["source"]; updated_at: string }[]).map(
+      (r): Proposal => ({ postingId: r.opportunity_id, body: r.body, source: r.source, updatedAt: r.updated_at }),
+    );
+  }
   async getProposal(postingId: string) {
     const { data, error } = await this.db.from("proposals").select("opportunity_id,body,source,updated_at").eq("owner_id", this.owner).eq("opportunity_id", postingId).maybeSingle();
     check(error);

@@ -7,14 +7,14 @@ import { DEFAULT_SETTINGS, type AutomationLogEntry, type AutomationSettings } fr
 import type { CalEvent, NewEvent } from "@/lib/calendar/types";
 import { EMPTY_BUSINESS, type BusinessProfile } from "./types";
 import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
-import type { AttendanceEntry, ContentInput, ContentPost, ContentStatus, SlotInput, TimetableSlot, Client, ClientInput, NewRecurring, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { AttendanceEntry, ContentInput, ContentPost, ContentStatus, SlotInput, TimetableSlot, Client, ClientInput, NewRecurring, NewRecurringInvoice, RecurringInvoice, RecurringTxn, Invoice, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 /**
  * In-memory store for demo mode, one per demo session id.
  * It lives in the server process: restarting the server resets it.
  * Capped so a public demo can't be used to fill memory.
  */
-type Store = { attendance?: AttendanceEntry[]; slots?: TimetableSlot[]; content?: ContentPost[]; proposals?: Record<string, Proposal>; notifications?: AppNotification[]; push?: PushSubscriptionRecord[]; recurring: RecurringTxn[]; clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
+type Store = { attendance?: AttendanceEntry[]; slots?: TimetableSlot[]; content?: ContentPost[]; proposals?: Record<string, Proposal>; notifications?: AppNotification[]; push?: PushSubscriptionRecord[]; recurring: RecurringTxn[]; recurringInvoices?: RecurringInvoice[]; clients: Client[]; projects: Project[]; tasks: Task[]; transactions: Transaction[]; invoices: Invoice[]; oppStatus: Record<string, PipelineStatus>; settings: AutomationSettings; log: (AutomationLogEntry & { key: string })[]; events: CalEvent[]; business: BusinessProfile; touched: number };
 const LIMIT = { recurring: 50, sessions: 500, clients: 200, projects: 200, tasks: 1000, transactions: 2000, invoices: 300 };
 
 const g = globalThis as unknown as { __dashDemo?: Map<string, Store> };
@@ -215,6 +215,11 @@ export class DemoRepo implements Repo {
     this.s.clients.unshift(c);
     return c;
   }
+  async createClients(inputs: ClientInput[]) {
+    cap(this.s.clients.length + inputs.length - 1, LIMIT.clients);
+    for (const i of inputs) await this.createClient(i);
+    return inputs.length;
+  }
   async updateClient(id: string, i: ClientInput) {
     const c = this.s.clients.find((x) => x.id === id);
     if (!c) throw new NotFoundError();
@@ -294,6 +299,11 @@ export class DemoRepo implements Repo {
     this.s.transactions.unshift(t);
     return t;
   }
+  async createTransactions(inputs: TransactionInput[]) {
+    cap(this.s.transactions.length + inputs.length - 1, LIMIT.transactions);
+    for (const i of inputs) await this.createTransaction(i);
+    return inputs.length;
+  }
   async deleteTransaction(id: string) {
     this.s.transactions = this.s.transactions.filter((x) => x.id !== id);
   }
@@ -314,6 +324,24 @@ export class DemoRepo implements Repo {
   }
   async deleteRecurring(id: string) {
     this.s.recurring = (this.s.recurring ??= []).filter((x) => x.id !== id);
+  }
+
+  async listRecurringInvoices() {
+    return [...(this.s.recurringInvoices ??= [])].sort((a, b) => a.nextDate.localeCompare(b.nextDate));
+  }
+  async createRecurringInvoice(i: NewRecurringInvoice) {
+    cap((this.s.recurringInvoices ??= []).length, LIMIT.recurring);
+    const r: RecurringInvoice = { id: randomUUID(), ...i, createdAt: new Date().toISOString() };
+    this.s.recurringInvoices.push(r);
+    return r;
+  }
+  async setRecurringInvoiceNext(id: string, nextDate: string) {
+    const r = (this.s.recurringInvoices ??= []).find((x) => x.id === id);
+    if (!r) throw new NotFoundError();
+    r.nextDate = nextDate;
+  }
+  async deleteRecurringInvoice(id: string) {
+    this.s.recurringInvoices = (this.s.recurringInvoices ??= []).filter((x) => x.id !== id);
   }
 
   async listInvoices() {
@@ -445,6 +473,9 @@ export class DemoRepo implements Repo {
     this.s.content = (this.s.content ??= []).filter((x) => x.id !== id);
   }
 
+  async listProposals() {
+    return Object.values(this.s.proposals ?? {}).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
   async getProposal(postingId: string) {
     return (this.s.proposals ??= {})[postingId] ?? null;
   }

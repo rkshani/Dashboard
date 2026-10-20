@@ -9,6 +9,7 @@ import { composeDigest } from "@/lib/automations/compose";
 import { IMPLEMENTED_RULES } from "@/lib/automations/types";
 import { emailConfigured, sendEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
+import { materializeRecurringInvoices } from "@/lib/recurring-invoices";
 import type { FormState } from "@/lib/data/types";
 import { getTemplate } from "@/templates";
 
@@ -42,12 +43,15 @@ export async function saveDigestTime(_prev: FormState, fd: FormData): Promise<Fo
 
 export async function runNow(_prev: FormState): Promise<FormState> {
   void _prev;
-  const { repo, today, userId } = await getRepo();
+  const { repo, today, userId, demo } = await getRepo();
   if (!(await rateLimit(`automations:${userId}`, 6, 60_000))) return res("error", "Please wait a moment before running again.");
-  const { profile } = await requireProfile();
-  const done = await runAutomations({ repo, profile, template: getTemplate(profile.templateId), today });
+  const { user, profile } = await requireProfile();
+  const ownerEmail = async () => user.email || null;
+  const issued = await materializeRecurringInvoices(repo, today, { emailClients: !demo, senderName: profile.displayName, ownerEmail });
+  const done = await runAutomations({ repo, profile, template: getTemplate(profile.templateId), today, emailClients: !demo, ownerEmail });
+  const count = issued + done.length;
   refresh();
-  return res("success", done.length ? `Done: ${done.length} action${done.length > 1 ? "s" : ""}. See the log below.` : "All caught up. Nothing new to do.");
+  return res("success", count ? `Done: ${count} action${count > 1 ? "s" : ""}. See the log below.` : "All caught up. Nothing new to do.");
 }
 
 export async function sendTestDigest(_prev: FormState): Promise<FormState> {

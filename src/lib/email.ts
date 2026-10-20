@@ -5,7 +5,9 @@ export function emailConfigured() {
   return Boolean(process.env.RESEND_API_KEY && process.env.DIGEST_FROM_EMAIL);
 }
 
-export async function sendEmail(msg: { to: string; subject: string; html: string; text: string; replyTo?: string | null }) {
+export type EmailAttachment = { filename: string; content: Uint8Array };
+
+export async function sendEmail(msg: { to: string; subject: string; html: string; text: string; replyTo?: string | null; attachments?: EmailAttachment[] }) {
   if (!emailConfigured()) throw new Error("Email is not configured");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg.to)) throw new Error("Invalid recipient");
   const res = await fetch("https://api.resend.com/emails", {
@@ -18,6 +20,7 @@ export async function sendEmail(msg: { to: string; subject: string; html: string
       html: msg.html,
       text: msg.text,
       ...(msg.replyTo && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg.replyTo) ? { reply_to: msg.replyTo } : {}),
+      ...(msg.attachments?.length ? { attachments: msg.attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString("base64") })) } : {}),
     }),
     cache: "no-store",
   });

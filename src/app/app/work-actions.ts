@@ -4,6 +4,10 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { getRepo } from "@/lib/data";
 import { NotFoundError, type Repo } from "@/lib/data/repo";
+import { parseCsv } from "@/lib/csv";
+import { mapClients } from "@/lib/import/clients";
+import { describeSkipped, readCsvUpload } from "@/lib/import/upload";
+import { rateLimit } from "@/lib/rate-limit";
 import { nextTaskDate } from "@/lib/recurrence";
 import { clientInput, idSchema, PROJECT_STATUSES, projectInput, taskInput, type FormState } from "@/lib/data/types";
 import { z } from "zod";
@@ -55,6 +59,23 @@ export async function saveClient(_prev: FormState, fd: FormData): Promise<FormSt
     return run(() => repo.updateClient(pid.data, parsed.data), "Saved.");
   }
   return run(async () => void (await repo.createClient(parsed.data)), "Added.");
+}
+
+/** CSV contact or student list → clients. People already added (same email, or same name) are skipped. */
+export async function importClientsCsv(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { repo, userId } = await getRepo();
+  if (!(await rateLimit(`csv-import:${userId}`, 10, 3_600_000))) return fail("You've imported a lot this hour. Try again later.");
+  const upload = await readCsvUpload(fd);
+  if ("error" in upload) return fail(upload.error);
+  const result = mapClients(parseCsv(upload.text, 1001), await repo.listClients());
+  if (result.error) return fail(result.error);
+  const n = result.rows.length;
+  const parts = [n ? `Imported ${n}.` : "Nothing new to import."];
+  if (result.duplicates) parts.push(`${result.duplicates} ${result.duplicates === 1 ? "was" : "were"} already there.`);
+  const skipped = describeSkipped(result.skipped);
+  if (skipped) parts.push(skipped);
+  if (!n) return result.skipped.length && !result.duplicates ? fail(parts.join(" ")) : ok(parts.join(" "));
+  return run(async () => void (await repo.createClients(result.rows)), parts.join(" "));
 }
 
 export async function deleteClient(fd: FormData) {

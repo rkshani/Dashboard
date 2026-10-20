@@ -19,6 +19,7 @@ import type { CalEvent } from "@/lib/calendar/types";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { materializeRecurring } from "@/lib/recurring";
+import { materializeRecurringInvoices } from "@/lib/recurring-invoices";
 import { getRates } from "@/lib/fx";
 import { feeRows } from "@/lib/teaching/fees";
 import { FeesPanel } from "@/components/app/views/FeesPanel";
@@ -147,10 +148,12 @@ async function ModuleBody({ params, searchParams }: Pick<PageProps<"/app/[module
   if (mod.id === "finance" || mod.id === "invoices") {
     const { repo, today, currency } = await getRepo();
     if (mod.id === "finance") await materializeRecurring(repo, today);
+    // Opening Invoices issues any due repeating invoices as drafts; auto-send ones wait for the scheduled job, which emails them.
+    if (mod.id === "invoices") await materializeRecurringInvoices(repo, today, { emailClients: false, senderName: profile.displayName });
     const [clients, projects, transactions, invoices, recurring] = await Promise.all([repo.listClients(), repo.listProjects(), repo.listTransactions(), repo.listInvoices(), repo.listRecurring()]);
     if (mod.id === "invoices") {
-      const business = await repo.getBusinessProfile();
-      return <InvoicesView template={template} fx={await getRates()} invoices={invoices} clients={clients} projects={projects} today={today} currency={currency} defaultDueDate={business.defaultDueDays ? addDays(today, business.defaultDueDays) : today} />;
+      const [business, recurringInvoices] = await Promise.all([repo.getBusinessProfile(), repo.listRecurringInvoices()]);
+      return <InvoicesView template={template} fx={await getRates()} invoices={invoices} clients={clients} projects={projects} today={today} currency={currency} recurring={recurringInvoices} defaultDueDate={business.defaultDueDays ? addDays(today, business.defaultDueDays) : today} />;
     }
     const sp = await searchParams;
     const current = monthKey(today);

@@ -4,14 +4,20 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { getRepo } from "@/lib/data";
 import { NotFoundError } from "@/lib/data/repo";
-import { businessInput, idSchema, INVOICE_STATUSES, invoiceInput, invoiceTotal, moneyRepeatInput, transactionInput, type FormState } from "@/lib/data/types";
+import { businessInput, idSchema, INVOICE_STATUSES, invoiceInput, invoiceTotal, MissingMigrationError, moneyRepeatInput, transactionInput, type FormState } from "@/lib/data/types";
 import { requireProfile } from "@/lib/auth";
-import { emailConfigured, sendEmail } from "@/lib/email";
-import { renderInvoiceEmail } from "@/lib/invoices/email";
+import { daysBetween, relativeDay } from "@/lib/dates";
+import { emailConfigured } from "@/lib/email";
+import { emailInvoice } from "@/lib/invoices/send";
 import { fmtMoney } from "@/lib/money";
 import { rateLimit } from "@/lib/rate-limit";
-import type { MoneyCadence } from "@/lib/recurrence";
+import { cadenceLabel, MONEY_CADENCES, type MoneyCadence } from "@/lib/recurrence";
+import { parseCsv } from "@/lib/csv";
+import { mapTransactions, txKey } from "@/lib/import/transactions";
+import { describeSkipped, readCsvUpload } from "@/lib/import/upload";
+import { parseQuickAdd } from "@/lib/quick-add";
 import { materializeRecurring } from "@/lib/recurring";
+import { materializeRecurringInvoices } from "@/lib/recurring-invoices";
 import { MONEY_CURRENCIES } from "@/lib/fx-math";
 
 const ok = (message: string): FormState => ({ status: "success", message, at: Date.now() });
@@ -57,6 +63,47 @@ export async function addTransaction(_prev: FormState, fd: FormData): Promise<Fo
     await repo.createRecurring({ ...rest, currency, cadence: repeat.data as MoneyCadence, startDate: date, nextDate: date });
     await materializeRecurring(repo, today, false);
   }, date > today ? `Repeating ${noun} saved. The first one is added on ${date}.` : `Repeating ${noun} saved and added.`);
+}
+
+/** One line like "Lunch 500 PKR yesterday" → a transaction. The parse is re-checked with the normal schema. */
+export async function quickAddTransaction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { repo, currency: mine, today } = await getRepo();
+  const r = parseQuickAdd(String(fd.get("text") ?? ""), today, mine);
+  if (!r.ok) return fail(r.error);
+  const v = r.value;
+  const parsed = transactionInput.safeParse({ kind: v.kind, amount: v.amount, category: v.category, date: v.date, note: v.note ?? undefined });
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const label = `${v.kind === "income" ? "Income" : "Expense"} added: ${fmtMoney(parsed.data.amount, v.currency)} · ${v.category} · ${relativeDay(v.date, today)}.`;
+  return run(async () => void (await repo.createTransaction({ ...parsed.data, currency: v.currency })), label);
+}
+
+/** CSV from a bank or spreadsheet → transactions. Rows already in the ledger are skipped, so re-importing a file is safe. */
+export async function importTransactionsCsv(_prev: FormState, fd: FormData): Promise<FormState> {
+  const defaultKind = fd.get("defaultKind") === "income" ? "income" : "expense";
+  const { repo, currency, userId } = await getRepo();
+  if (!(await rateLimit(`csv-import:${userId}`, 10, 3_600_000))) return fail("You've imported a lot this hour. Try again later.");
+  const upload = await readCsvUpload(fd);
+  if ("error" in upload) return fail(upload.error);
+  const result = mapTransactions(parseCsv(upload.text, 2001), { defaultCurrency: currency, defaultKind });
+  if (result.error) return fail(result.error);
+
+  // Skip entries already in the ledger, counting copies, so importing the same file twice adds nothing
+  // while two identical coffees on the same day in one file are both kept.
+  const counts = new Map<string, number>();
+  for (const t of await repo.listTransactions()) counts.set(txKey(t), (counts.get(txKey(t)) ?? 0) + 1);
+  let duplicates = 0;
+  const fresh = result.rows.filter((t) => {
+    const n = counts.get(txKey(t)) ?? 0;
+    if (n > 0) counts.set(txKey(t), n - 1);
+    return n > 0 ? (duplicates++, false) : true;
+  });
+
+  const parts = [fresh.length ? `Imported ${fresh.length} ${fresh.length === 1 ? "entry" : "entries"}.` : "Nothing new to import."];
+  if (duplicates) parts.push(`${duplicates} ${duplicates === 1 ? "was" : "were"} already there.`);
+  const skipped = describeSkipped(result.skipped);
+  if (skipped) parts.push(skipped);
+  if (!fresh.length) return result.skipped.length && !duplicates ? fail(parts.join(" ")) : ok(parts.join(" "));
+  return run(async () => void (await repo.createTransactions(fresh.map((t) => ({ ...t, invoiceId: null })))), parts.join(" "));
 }
 
 export async function stopRecurring(fd: FormData) {
@@ -133,6 +180,47 @@ export async function saveBusinessProfile(_prev: FormState, fd: FormData): Promi
   return run(() => repo.saveBusinessProfile(parsed.data), "Invoice details saved.");
 }
 
+const repeatInvoiceInput = z.object({
+  id: idSchema,
+  cadence: z.enum(MONEY_CADENCES),
+  nextDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the date of the next invoice."),
+  autoSend: z.literal("on").optional(),
+});
+
+/** "Repeat this invoice": saves its client, items and terms as a schedule. Each occurrence becomes a new invoice. */
+export async function repeatInvoice(_prev: FormState, fd: FormData): Promise<FormState> {
+  const parsed = repeatInvoiceInput.safeParse({ id: fd.get("id"), cadence: fd.get("cadence"), nextDate: fd.get("nextDate"), autoSend: fd.get("autoSend") ?? undefined });
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const { repo, today, demo } = await getRepo();
+  const { user, profile } = await requireProfile();
+  const [invoices, business] = await Promise.all([repo.listInvoices(), repo.getBusinessProfile()]);
+  const inv = invoices.find((i) => i.id === parsed.data.id);
+  if (!inv) return fail("That invoice no longer exists.");
+  const { nextDate, cadence } = parsed.data;
+  if (nextDate <= inv.issueDate) return fail("The next invoice must be dated after this one.");
+  const dueDays = inv.dueDate ? Math.min(365, Math.max(0, daysBetween(inv.issueDate, inv.dueDate))) : business.defaultDueDays;
+  try {
+    await repo.createRecurringInvoice({ clientId: inv.clientId, projectId: inv.projectId, currency: inv.currency, items: inv.items, total: inv.total, notes: inv.notes, cadence, dueDays, autoSend: !!parsed.data.autoSend && !demo, startDate: nextDate, nextDate });
+    // A next date of today (or earlier) is issued right away.
+    if (nextDate <= today) await materializeRecurringInvoices(repo, today, { emailClients: !demo, senderName: profile.displayName, ownerEmail: async () => user.email || null, notifyUser: false });
+  } catch (e) {
+    if (e instanceof MissingMigrationError) return fail("Repeating invoices need a one-time database update: run supabase/migrations/0013_recurring_invoices.sql in the Supabase SQL Editor.");
+    if (e instanceof Error && e.message === "Demo limit reached") return fail("Demo limit reached. Stop a repeating entry first.");
+    console.error("[finance] repeat invoice failed:", e);
+    return fail("Something went wrong. Please try again.");
+  }
+  refresh();
+  return ok(`Saved: ${cadenceLabel[cadence].toLowerCase()}, ${nextDate <= today ? "and the next invoice was issued now" : `next invoice on ${nextDate}`}. Manage it under Invoices → Repeating.`);
+}
+
+export async function stopRecurringInvoice(fd: FormData) {
+  const id = idSchema.safeParse(fd.get("id"));
+  if (!id.success) return;
+  const { repo } = await getRepo();
+  // Invoices already issued stay; only future ones stop.
+  await run(() => repo.deleteRecurringInvoice(id.data), "Stopped. Invoices already issued are kept.");
+}
+
 const sendInput = z.object({ id: idSchema, message: z.string().trim().max(1000).optional() });
 
 /** Emails the invoice to the client's address; replies go to you. Marks a draft as sent. */
@@ -141,7 +229,7 @@ export async function sendInvoiceToClient(_prev: FormState, fd: FormData): Promi
   if (!parsed.success) return fail("Invalid request.");
   const { repo, today, userId, demo } = await getRepo();
   const { user, profile } = await requireProfile();
-  if (demo) return fail("Emails can't be sent in demo mode. Use Print / save as PDF instead.");
+  if (demo) return fail("Emails can't be sent in demo mode. Use Download PDF and send it yourself.");
   if (!emailConfigured()) return fail("Email sending isn't set up on this server yet.");
   if (!(await rateLimit(`invoice-email:${userId}`, 10, 60 * 60_000))) return fail("You've sent a lot of invoices this hour. Try again later.");
 
@@ -151,9 +239,8 @@ export async function sendInvoiceToClient(_prev: FormState, fd: FormData): Promi
   const client = inv.clientId ? clients.find((c) => c.id === inv.clientId) : undefined;
   if (!client?.email) return fail("Add an email address to this client first.");
 
-  const { subject, html, text } = renderInvoiceEmail({ invoice: inv, client, business, senderName: profile.displayName, money: fmtMoney, message: parsed.data.message || null });
   try {
-    await sendEmail({ to: client.email, subject, html, text, replyTo: business.contactEmail ?? user.email });
+    await emailInvoice({ invoice: inv, client, business, senderName: profile.displayName, replyTo: business.contactEmail ?? user.email, message: parsed.data.message || null });
   } catch (e) {
     console.error("[invoice] send failed:", e instanceof Error ? e.message : e);
     return fail("Couldn't send the email. Please try again.");

@@ -54,6 +54,7 @@ export const softwareEngineer: TemplateInput = {
     { id: "contacted-followup", when: "You mark a lead as Contacted", then: "Create a follow-up task in 3 days", enabledByDefault: true },
     { id: "deadline-warning", when: "A project deadline is 2 days away", then: "Add a reminder task and list it in your digest", enabledByDefault: true },
     { id: "invoice-overdue", when: "An invoice passes its due date", then: "Add a task to chase the payment", enabledByDefault: true },
+    { id: "invoice-reminder-email", when: "An invoice is 1, 7 and 14 days overdue", then: "Email your client a polite reminder with the invoice PDF attached (off until you turn it on)", enabledByDefault: false },
     { id: "morning-digest", when: "Every day at your chosen time", then: "Email a digest of meetings, tasks, deadlines and top matches", enabledByDefault: true },
   ],
   defaultTheme: "midnight",

@@ -1,4 +1,4 @@
-import type { AttendanceEntry, ContentInput, ContentPost, ContentStatus, SlotInput, TimetableSlot, BusinessProfile, Client, NewRecurring, RecurringTxn, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
+import type { AttendanceEntry, ContentInput, ContentPost, ContentStatus, SlotInput, TimetableSlot, BusinessProfile, Client, NewRecurring, NewRecurringInvoice, RecurringInvoice, RecurringTxn, ClientInput, Invoice, InvoiceInput, InvoiceStatus, Project, ProjectInput, ProjectStatus, Task, TaskInput, Transaction, TransactionInput } from "./types";
 
 import type { PipelineStatus, Posting } from "@/lib/opportunities/types";
 import type { AppNotification, NewNotification, PushSubscriptionRecord } from "@/lib/notifications/types";
@@ -47,6 +47,12 @@ export interface Repo {
   setRecurringNext(id: string, nextDate: string): Promise<void>;
   deleteRecurring(id: string): Promise<void>;
 
+  /** Empty (not an error) while migration 0013 hasn't been run, so pages keep working. */
+  listRecurringInvoices(): Promise<RecurringInvoice[]>;
+  createRecurringInvoice(input: NewRecurringInvoice): Promise<RecurringInvoice>;
+  setRecurringInvoiceNext(id: string, nextDate: string): Promise<void>;
+  deleteRecurringInvoice(id: string): Promise<void>;
+
   listInvoices(): Promise<Invoice[]>;
   createInvoice(input: NewInvoice): Promise<Invoice>;
   updateInvoice(id: string, input: Omit<NewInvoice, "currency">): Promise<void>;
@@ -85,6 +91,11 @@ export interface Repo {
   setContentStatus(id: string, status: ContentStatus): Promise<void>;
   deleteContent(id: string): Promise<void>;
 
+  /** Bulk inserts for CSV import, all-or-nothing. Return how many were saved. */
+  createTransactions(inputs: TransactionInput[]): Promise<number>;
+  createClients(inputs: ClientInput[]): Promise<number>;
+
+  listProposals(): Promise<Proposal[]>;
   getProposal(postingId: string): Promise<Proposal | null>;
   saveProposal(postingId: string, body: string, source: Proposal["source"]): Promise<void>;
 

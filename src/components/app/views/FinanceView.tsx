@@ -1,11 +1,15 @@
 import Link from "next/link";
-import { deleteTransaction, stopRecurring } from "@/app/app/finance-actions";
+import { deleteTransaction, importTransactionsCsv, stopRecurring } from "@/app/app/finance-actions";
 import { MiniAction } from "@/components/app/forms";
+import { CsvImport } from "@/components/app/CsvImport";
+import { QuickAdd } from "@/components/app/QuickAdd";
+import { inputCls, labelCls } from "@/components/app/styles";
 import { TransactionForm } from "@/components/app/TransactionForm";
 import { Icon } from "@/components/Sections";
 import { daysBetween, relativeDay } from "@/lib/dates";
 import type { Client, Invoice, RecurringTxn, Transaction } from "@/lib/data/types";
 import { cadenceLabel } from "@/lib/recurrence";
+import { PERIODS } from "@/lib/reports/pnl";
 import { convert, type Rates } from "@/lib/fx-math";
 import { fmtMoney, monthKey, monthLabel, shiftMonth } from "@/lib/money";
 import type { Template } from "@/templates";
@@ -184,7 +188,29 @@ export function FinanceView({
       <div className="mt-4 grid gap-4 lg:grid-cols-5">
         <section aria-label="Add a transaction" className="anim-rise min-w-0 rounded-2xl border border-line bg-surface p-5 lg:col-span-2" style={{ animationDelay: "250ms" }}>
           <h2 className="mb-4 font-display text-lg font-semibold">Add a transaction</h2>
+          <QuickAdd />
+          <p className="my-4 flex items-center gap-3 text-xs text-muted before:h-px before:flex-1 before:bg-line after:h-px after:flex-1 after:bg-line">or fill in the details</p>
           <TransactionForm today={today} currency={currency} clients={clients.map((c) => ({ id: c.id, name: c.name }))} incomeLabel={incomeLabel} />
+          <CsvImport
+            action={importTransactionsCsv}
+            sample={"Date,Description,Amount,Category\n2026-10-01,Lunch with client,-1500,Food\n2026-10-03,Website project,80000,Project payment\n2026-10-05,Internet bill,-3500,\n"}
+            sampleName="sample-transactions.csv"
+            hint={
+              <>
+                From your bank or a spreadsheet. It needs a header row with <strong>Date</strong> and <strong>Amount</strong> (or <strong>Debit</strong> and{" "}
+                <strong>Credit</strong>); Description, Category, Type and Currency are used when present. Negative amounts are expenses. Dates like 05/10/2026 are
+                read day first unless the file shows otherwise. Up to 2,000 rows; entries you already have are skipped.
+              </>
+            }
+          >
+            <label className="flex flex-col gap-1.5">
+              <span className={labelCls}>Rows with no minus sign or type are</span>
+              <select name="defaultKind" defaultValue="expense" className={inputCls}>
+                <option value="expense">Expenses</option>
+                <option value="income">{incomeLabel}</option>
+              </select>
+            </label>
+          </CsvImport>
           {recurring.length > 0 && (
             <div className="mt-6 border-t border-line pt-4">
               <h3 className="text-sm font-semibold">Repeating</h3>
@@ -248,6 +274,33 @@ export function FinanceView({
           )}
         </section>
       </div>
+
+      <section aria-label="Export" className="anim-rise mt-4 rounded-2xl border border-line bg-surface p-5" style={{ animationDelay: "350ms" }}>
+        <h2 className="font-display text-lg font-semibold">Export</h2>
+        <p className="mt-1 text-sm text-muted">A spreadsheet for your records or your accountant, in {currency}.</p>
+        <form method="get" action="/app/export" className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="flex min-w-44 flex-1 flex-col gap-1.5">
+            <span className={labelCls}>Report</span>
+            <select name="type" defaultValue="pnl" className={inputCls}>
+              <option value="pnl">Profit &amp; loss (by category and month)</option>
+              <option value="transactions">Every transaction</option>
+            </select>
+          </label>
+          <label className="flex min-w-36 flex-1 flex-col gap-1.5">
+            <span className={labelCls}>Period</span>
+            <select name="period" defaultValue="this-year" className={inputCls}>
+              {PERIODS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="lift h-11 cursor-pointer rounded-xl border border-line px-5 text-sm font-medium hover:bg-surface-2">
+            Download CSV
+          </button>
+        </form>
+      </section>
     </div>
   );
 }

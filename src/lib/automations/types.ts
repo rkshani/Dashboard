@@ -15,4 +15,4 @@ export type AutomationLogEntry = { id: string; ruleId: string; message: string; 
 export type Integration = { provider: "google"; refreshTokenEnc: string; accountEmail: string | null; scope: string; connectedAt: string };
 
 /** Rules the engine can actually run today. Others in a template show as "coming soon". */
-export const IMPLEMENTED_RULES = new Set(["high-match-task", "contacted-followup", "deadline-warning", "invoice-overdue", "morning-digest", "fee-reminder", "post-reminder"]);
+export const IMPLEMENTED_RULES = new Set(["high-match-task", "contacted-followup", "deadline-warning", "invoice-overdue", "invoice-reminder-email", "morning-digest", "fee-reminder", "post-reminder"]);

@@ -43,28 +43,36 @@ const sections: { title: string; body: string[] }[] = [
     ],
   },
   {
-    title: "6. Emails we send for you",
+    title: "6. AI drafts",
+    body: [
+      "Proposal and cover-letter drafts are written by an AI model (Claude, by Anthropic) from the posting and your profile. They can contain mistakes or claims that don't fit you.",
+      "Read and edit every draft before you send it. Nothing is sent for you, and you are responsible for what you send.",
+    ],
+  },
+  {
+    title: "7. Emails we send for you",
     body: [
       "When you email an invoice, it is sent to the address you entered for that client, and replies come to you. Only send invoices to people you work with.",
+      "If you turn on payment reminders in Automations, we email the client of an unpaid invoice up to three times (1, 7 and 14 days after it is due) on your behalf. You are responsible for those reminders being appropriate; keep invoice statuses up to date so paid invoices aren't chased.",
       "The daily digest goes only to you and can be switched off in Automations.",
     ],
   },
   {
-    title: "7. Acceptable use",
+    title: "8. Acceptable use",
     body: [
       "Don't use the service to send spam, break the law, or try to access other people's data or disrupt the service.",
       "We may suspend accounts that do.",
     ],
   },
   {
-    title: "8. No warranty and liability",
+    title: "9. No warranty and liability",
     body: [
       "The service is provided as is during the beta. Keep your own copies of anything critical, such as invoices you send.",
       "To the extent the law allows, we are not liable for indirect losses, lost income or lost data arising from use of the service.",
     ],
   },
   {
-    title: "9. Changes and contact",
+    title: "10. Changes and contact",
     body: [
       "We may update these terms; if a change matters, we'll tell you by email or in the app before it takes effect.",
       `Questions: ${site.contactEmail}.`,

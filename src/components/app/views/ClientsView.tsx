@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { deleteClient, saveClient } from "@/app/app/work-actions";
+import { deleteClient, importClientsCsv, saveClient } from "@/app/app/work-actions";
+import { CsvImport } from "@/components/app/CsvImport";
 import { ActionForm, MiniAction } from "@/components/app/forms";
 import { inputCls, labelCls } from "@/components/app/styles";
 import { Icon } from "@/components/Sections";
@@ -102,6 +103,22 @@ export function ClientsView({ template, clients, projects, teaching }: { templat
           <ActionForm action={saveClient} submitLabel={`Add ${v.client.toLowerCase()}`} resetOnSuccess>
             <ClientFields v={v} teaching={teaching} />
           </ActionForm>
+          <CsvImport
+            action={importClientsCsv}
+            sample={
+              teaching
+                ? "Name,Parent,Phone,Email,Monthly fee,Due day,Status\nAyesha Khan,Imran Khan,0300 1234567,,5000,5,active\nBilal Ahmed,Sara Ahmed,0321 7654321,sara@example.com,4500,10,active\n"
+                : "Name,Company,Email,Phone,Status,Notes\nAli Raza,Acme Ltd,ali@acme.com,+92 300 1234567,active,Website redesign\nMaria Lopez,,maria@example.com,,lead,Met at a meetup\n"
+            }
+            sampleName={`sample-${v.clients.toLowerCase()}.csv`}
+            hint={
+              <>
+                From a spreadsheet or your phone&apos;s contacts. It needs a header row with a <strong>Name</strong> column;{" "}
+                {teaching ? "Parent, Phone, Email, Monthly fee, Due day" : "Company, Email, Phone"}, Status (lead, active or past) and Notes are used when present. Up
+                to 1,000 rows; anyone you already have (same email, or same name) is skipped.
+              </>
+            }
+          />
         </div>
       </details>
 

@@ -196,6 +196,32 @@ export type RecurringTxn = {
   createdAt: string;
 };
 export type NewRecurring = Omit<RecurringTxn, "id" | "createdAt">;
+
+/** An invoice issued again on a schedule (retainers, monthly fees). Each occurrence is a normal invoice. */
+export type RecurringInvoice = {
+  id: string;
+  clientId: string | null;
+  projectId: string | null;
+  currency: string;
+  items: InvoiceItem[];
+  total: number;
+  notes: string | null;
+  cadence: MoneyCadence;
+  /** Each new invoice is due this many days after it is issued. */
+  dueDays: number;
+  /** Email each new invoice to the client automatically; otherwise it is created as a draft. */
+  autoSend: boolean;
+  startDate: string;
+  nextDate: string;
+  createdAt: string;
+};
+export type NewRecurringInvoice = Omit<RecurringInvoice, "id" | "createdAt">;
+/** Thrown when migration 0013 (recurring_invoices) hasn't been run on the database yet. */
+export class MissingMigrationError extends Error {
+  constructor(public migration: string) {
+    super(`Migration ${migration} has not been applied`);
+  }
+}
 export const moneyRepeatInput = z.enum(["none", ...MONEY_CADENCES]).default("none");
 
 export const invoiceItemSchema = z.object({

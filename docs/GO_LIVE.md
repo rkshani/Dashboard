@@ -28,8 +28,9 @@ Each step is marked **[You]** (needs your accounts or a decision) or **[AI]** (a
 
 ### 1.1 Supabase
 1. Create a project at supabase.com. Pick the region closest to your users.
-2. In the **SQL Editor**, run every file in `supabase/migrations/` in order, `0001` → `0012`.
+2. In the **SQL Editor**, run every file in `supabase/migrations/` in order, `0001` → `0013`.
    - If some were run earlier, still run `0012`: it fixes database triggers that blocked saving projects, tasks and invoices.
+   - **`0013_recurring_invoices.sql` was added on 20 Oct 2026, after 0001–0012 had already been run on the live project. Run just that file once.** Until it runs, the app keeps working, but "Repeat this invoice" shows a message asking for it.
 3. Go to **Authentication → URL Configuration**:
    - set Site URL to `https://YOUR-DOMAIN`;
    - add the redirect URL `https://YOUR-DOMAIN/auth/callback`.
@@ -98,8 +99,12 @@ Each step is marked **[You]** (needs your accounts or a decision) or **[AI]** (a
 
 ## Phase 2: Code tasks before launch [AI]
 
-### 2.1 Rewrite the privacy policy — `src/app/(marketing)/privacy/page.tsx`
-The page still describes the waitlist only. Rewrite it for the real app:
+> **Status (20 Oct 2026):** 2.1, 2.2 and 2.3 are done, and lint, tests and build pass. 2.4 is optional and waits on a decision. Things to check are listed under [Test notes](#test-notes) in Phase 3.
+
+### 2.1 Rewrite the privacy policy — `src/app/(marketing)/privacy/page.tsx` ✅
+Done. Every claim was checked against the code. "Export my data" now also includes proposal drafts and notifications, so the export matches what the policy says we store.
+
+The original brief:
 - **What we store:**
   - account email and profile (field, skills, rate, currency, timezone, theme);
   - clients, projects, tasks, transactions, invoices, students, attendance, content posts, notifications and proposal drafts.
@@ -121,13 +126,14 @@ The page still describes the waitlist only. Rewrite it for the real app:
 - **Contact:** use `NEXT_PUBLIC_CONTACT_EMAIL`.
 - Keep the existing page style. Run `npm run build` afterwards.
 
-### 2.2 Review the terms — `src/app/(marketing)/terms/page.tsx`
-Check that it mentions:
+### 2.2 Review the terms — `src/app/(marketing)/terms/page.tsx` ✅
+Done. The free beta and third-party listings were already covered; a new section 6, "AI drafts", was added. Check that it mentions:
 - the free beta (Pro is free, and features may change);
 - that AI drafts must be reviewed before sending;
 - that job listings belong to third parties.
 
-### 2.3 Install as an app (PWA manifest)
+### 2.3 Install as an app (PWA manifest) ✅
+Done: `src/app/manifest.ts`, plus `public/icon-512.png` and `public/icon-maskable-512.png` (redrawn sharp from the 192px icon; the maskable one is for Android's round icons).
 - Add `src/app/manifest.ts` with:
   - name "Dashboard";
   - `start_url: "/app"`;
@@ -145,6 +151,62 @@ Check that it mentions:
 ## Phase 3: Staging test with real services [You + AI]
 
 Deploy to a Vercel preview with real keys, then tick each item:
+
+### Test notes
+
+Added while building, for the final test pass. Each one comes from a change made after this guide was written.
+
+- [ ] **Speed fix** (`src/lib/supabase/server.ts`, `await connection()`):
+  - [ ] signed-in pages open in a second or two on Vercel, not 10+ seconds;
+  - [ ] Vercel logs have no `unstable value Date.now()` or `ERR_STREAM_DESTROYED` errors.
+- [ ] **Privacy page** (`/privacy`):
+  - [ ] reads correctly on desktop and phone;
+  - [ ] the contact email is your real one (needs `NEXT_PUBLIC_CONTACT_EMAIL` on Vercel), not `hello@example.com`;
+  - [ ] the Google policy link opens.
+- [ ] **Terms** (`/terms`): sections are numbered 1–10, and section 6 is "AI drafts".
+- [ ] **Export my data** (Settings): the JSON file includes `proposalDrafts` and `notifications`.
+- [ ] **Install as an app:**
+  - [ ] `/manifest.webmanifest` opens, and Chrome DevTools → Application → Manifest shows no errors and all 3 icons;
+  - [ ] Android: Chrome menu → Install app. The icon looks right, and the app opens `/app` with no browser bar;
+  - [ ] iPhone: Safari → Share → Add to Home Screen. Then push notifications work from the installed app.
+- [ ] **Quick add** (Money page → "Quick add" box; the parser is `src/lib/quick-add.ts`):
+  - [ ] `Lunch 500 PKR yesterday` → a 500 PKR Food expense dated yesterday, with the note "Lunch";
+  - [ ] `+50000 salary` → income, category Salary;
+  - [ ] `rent 2 lakh 1 oct` → 200,000 Rent on 1 October;
+  - [ ] `lunch yesterday` (no amount) → a clear error, and nothing is saved;
+  - [ ] the box clears after a successful add, and the new entry shows in the month list and totals.
+- [ ] **CSV import, money** (Money page → "Import from a CSV file"):
+  - [ ] "Download a sample" saves a file. Importing it unchanged adds 3 entries: 2 expenses and 1 income;
+  - [ ] importing the same file again says "Nothing new to import. 3 were already there.";
+  - [ ] a real bank statement CSV (for example HBL, Meezan or Sadapay) imports with correct dates, amounts and income/expense. Check one date like 05/10, which should be 5 October;
+  - [ ] an `.xlsx` file, or one over 900 KB, gives a clear error and saves nothing.
+- [ ] **CSV import, clients and students** (Clients/Students page → New → "Import from a CSV file"):
+  - [ ] the sample imports, and the teacher sample fills parent, monthly fee and due day;
+  - [ ] importing it again skips everyone;
+  - [ ] a Google Contacts export (Google Contacts → Export → Google CSV) picks up names, emails, phones and company. The split First/Last Name and "E-mail 1 - Value" columns are supported; a test covers this.
+- [ ] **Invoice PDF** (invoice page → "Download PDF"; built by `src/lib/invoices/pdf.ts`):
+  - [ ] it downloads as `INV-0001.pdf` and opens on desktop and phone;
+  - [ ] your business name, address, payment details, items and total all show, and a long invoice continues onto page 2;
+  - [ ] "Email to client" now arrives **with the PDF attached**;
+  - [ ] known limit: names in Urdu or other non-Latin scripts print as `?` in the PDF (the web page and email are fine). Fixing this means embedding a font; decide if it matters.
+- [ ] **Payment reminder emails** (Automations → "An invoice is 1, 7 and 14 days overdue"; **off by default**):
+  - [ ] turn it on. For a "sent" invoice whose due date was yesterday and whose client has *your own* test email, "Run now" sends one "Reminder:" email with the PDF;
+  - [ ] "Run now" again sends nothing more;
+  - [ ] replying to the email goes to your business email (Settings), or to your login email if none is set;
+  - [ ] you get an in-app notification "Reminder sent for INV-…";
+  - [ ] marking the invoice paid stops further reminders.
+- [ ] **P&L export** (Money page → "Export" at the bottom; `/app/export`):
+  - [ ] "Profit & loss" + "This year" downloads a CSV that opens cleanly in Excel and Google Sheets, with a column per month, income and expense categories, totals and net profit;
+  - [ ] the totals match the Money page for the same month (both convert other currencies at today's rates);
+  - [ ] "Every transaction" lists each entry with money out as negative, plus client names;
+  - [ ] a client name with an accent (é) shows correctly in Excel.
+- [ ] **Repeating invoices** (needs migration `0013` first; invoice page → "Repeat this invoice"):
+  - [ ] before running 0013, saving a schedule shows the "run 0013" message and nothing breaks;
+  - [ ] after running it, save a monthly schedule with tomorrow's date. It shows under Invoices → Repeating;
+  - [ ] the next day, opening Invoices shows a new **draft** invoice with the next number, the same items, and the due date shifted the same way;
+  - [ ] with "Email each new invoice automatically" on (test it with *your own* email as the client), the scheduled job emails it with the PDF and marks it Sent. "Run now" on Automations does the same;
+  - [ ] "Stop" removes the schedule and keeps the invoices already issued.
+- [ ] **Before a paid launch:** have a lawyer review `/privacy` and `/terms`. This isn't a test, but don't forget it.
 
 - [ ] Sign up with an email magic link, then with Google, then sign out and back in.
 - [ ] Onboarding works for all 4 fields (Software Engineer, Designer, Teacher, Marketer).
@@ -194,12 +256,12 @@ Deploy to a Vercel preview with real keys, then tick each item:
 ## Not needed for the beta (later)
 
 - **Billing**, before Pro becomes paid: Stripe internationally, and a Pakistan option such as PayFast, JazzCash or Easypaisa.
-- **Quick wins:**
-  - quick add ("Lunch 500 PKR yesterday");
-  - CSV import;
-  - invoice PDF download and automatic payment reminders;
-  - P&L export;
-  - repeating invoices.
+- **Quick wins:** all done on 20 Oct 2026; see [Test notes](#test-notes).
+  - ✅ quick add ("Lunch 500 PKR yesterday");
+  - ✅ CSV import (transactions, and clients/students);
+  - ✅ invoice PDF download (also attached to invoice emails) and automatic payment reminders (off by default);
+  - ✅ P&L export;
+  - ✅ repeating invoices (needs migration `0013`).
 - **Bigger features:**
   - time tracking → invoice;
   - your own "When → Then" automation rules;
